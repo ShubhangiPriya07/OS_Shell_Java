@@ -7,19 +7,29 @@ public class Main {
         List<String> args = new ArrayList<>();
 
         StringBuilder current = new StringBuilder();
+
         boolean inSingleQuotes = false;
+        boolean inDoubleQuotes = false;
 
         for (int i = 0; i < input.length(); i++) {
             char c = input.charAt(i);
 
-            if (c == '\'') {
+            if (c == '\'' && !inDoubleQuotes) {
                 inSingleQuotes = !inSingleQuotes;
-            } else if (Character.isWhitespace(c) && !inSingleQuotes) {
+            }
+            else if (c == '"' && !inSingleQuotes) {
+                inDoubleQuotes = !inDoubleQuotes;
+            }
+            else if (Character.isWhitespace(c)
+                    && !inSingleQuotes
+                    && !inDoubleQuotes) {
+
                 if (current.length() > 0) {
                     args.add(current.toString());
                     current.setLength(0);
                 }
-            } else {
+            }
+            else {
                 current.append(c);
             }
         }
@@ -67,13 +77,13 @@ public class Main {
 
                 String cmd = parts[1];
 
-                if (cmd.equals("echo") ||
-                    cmd.equals("exit") ||
-                    cmd.equals("type")) {
+                if (cmd.equals("echo")
+                        || cmd.equals("exit")
+                        || cmd.equals("type")) {
 
                     System.out.println(cmd + " is a shell builtin");
-                } else {
-
+                }
+                else {
                     String pathEnv = System.getenv("PATH");
                     String[] paths = pathEnv.split(File.pathSeparator);
 
@@ -83,7 +93,8 @@ public class Main {
                         File file = new File(path, cmd);
 
                         if (file.exists() && file.canExecute()) {
-                            System.out.println(cmd + " is " + file.getAbsolutePath());
+                            System.out.println(
+                                    cmd + " is " + file.getAbsolutePath());
                             found = true;
                             break;
                         }
@@ -105,7 +116,9 @@ public class Main {
                     File file = new File(path, command);
 
                     if (file.exists() && file.canExecute()) {
-                        ProcessBuilder pb = new ProcessBuilder(Arrays.asList(parts));
+                        ProcessBuilder pb =
+                                new ProcessBuilder(Arrays.asList(parts));
+
                         pb.inheritIO();
 
                         Process process = pb.start();
