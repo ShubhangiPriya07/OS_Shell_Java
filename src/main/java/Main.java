@@ -1,4 +1,5 @@
 import java.io.File;
+import java.io.FileWriter;
 import java.util.Scanner;
 import java.util.Arrays;
 import java.util.ArrayList;
@@ -17,7 +18,6 @@ public class Main {
         for (int i = 0; i < input.length(); i++) {
             char c = input.charAt(i);
 
-            // Backslashes inside double quotes
             if (inDoubleQuotes && c == '\\') {
                 if (i + 1 < input.length()) {
                     char next = input.charAt(i + 1);
@@ -33,7 +33,6 @@ public class Main {
                 }
             }
 
-            // Backslashes outside quotes
             else if (c == '\\' && !inSingleQuotes && !inDoubleQuotes) {
                 if (i + 1 < input.length()) {
                     current.append(input.charAt(i + 1));
@@ -84,6 +83,25 @@ public class Main {
                 continue;
             }
 
+            String outputFile = null;
+            List<String> commandParts = new ArrayList<>();
+
+            for (int i = 0; i < parts.length; i++) {
+                if (parts[i].equals(">") || parts[i].equals("1>")) {
+                    if (i + 1 < parts.length) {
+                        outputFile = parts[i + 1];
+                    }
+                    break;
+                }
+                commandParts.add(parts[i]);
+            }
+
+            parts = commandParts.toArray(new String[0]);
+
+            if (parts.length == 0) {
+                continue;
+            }
+
             String command = parts[0];
 
             if (command.equals("exit")) {
@@ -91,13 +109,24 @@ public class Main {
             }
 
             else if (command.equals("echo")) {
+                StringBuilder output = new StringBuilder();
+
                 for (int i = 1; i < parts.length; i++) {
                     if (i > 1) {
-                        System.out.print(" ");
+                        output.append(" ");
                     }
-                    System.out.print(parts[i]);
+                    output.append(parts[i]);
                 }
-                System.out.println();
+
+                output.append(System.lineSeparator());
+
+                if (outputFile != null) {
+                    try (FileWriter writer = new FileWriter(outputFile, false)) {
+                        writer.write(output.toString());
+                    }
+                } else {
+                    System.out.print(output);
+                }
             }
 
             else if (command.equals("type")) {
@@ -106,32 +135,36 @@ public class Main {
                 }
 
                 String cmd = parts[1];
+                String result;
 
                 if (cmd.equals("echo")
                         || cmd.equals("exit")
                         || cmd.equals("type")) {
 
-                    System.out.println(cmd + " is a shell builtin");
+                    result = cmd + " is a shell builtin";
                 } else {
 
                     String pathEnv = System.getenv("PATH");
                     String[] paths = pathEnv.split(File.pathSeparator);
 
-                    boolean found = false;
+                    result = cmd + ": not found";
 
                     for (String path : paths) {
                         File file = new File(path, cmd);
 
                         if (file.exists() && file.canExecute()) {
-                            System.out.println(cmd + " is " + file.getAbsolutePath());
-                            found = true;
+                            result = cmd + " is " + file.getAbsolutePath();
                             break;
                         }
                     }
+                }
 
-                    if (!found) {
-                        System.out.println(cmd + ": not found");
+                if (outputFile != null) {
+                    try (FileWriter writer = new FileWriter(outputFile, false)) {
+                        writer.write(result + System.lineSeparator());
                     }
+                } else {
+                    System.out.println(result);
                 }
             }
 
@@ -149,7 +182,14 @@ public class Main {
                         ProcessBuilder pb =
                                 new ProcessBuilder(Arrays.asList(parts));
 
-                        pb.inheritIO();
+                        pb.redirectInput(ProcessBuilder.Redirect.INHERIT);
+                        pb.redirectError(ProcessBuilder.Redirect.INHERIT);
+
+                        if (outputFile != null) {
+                            pb.redirectOutput(new File(outputFile));
+                        } else {
+                            pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+                        }
 
                         Process process = pb.start();
                         process.waitFor();
