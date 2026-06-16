@@ -85,6 +85,7 @@ public class Main {
 
             String stdoutFile = null;
             String stderrFile = null;
+            boolean stdoutAppend = false;
 
             List<String> commandParts = new ArrayList<>();
 
@@ -93,6 +94,15 @@ public class Main {
                 if (parts[i].equals(">") || parts[i].equals("1>")) {
                     if (i + 1 < parts.length) {
                         stdoutFile = parts[i + 1];
+                        stdoutAppend = false;
+                    }
+                    i++;
+                }
+
+                else if (parts[i].equals(">>") || parts[i].equals("1>>")) {
+                    if (i + 1 < parts.length) {
+                        stdoutFile = parts[i + 1];
+                        stdoutAppend = true;
                     }
                     i++;
                 }
@@ -135,7 +145,8 @@ public class Main {
                 output.append(System.lineSeparator());
 
                 if (stdoutFile != null) {
-                    try (FileWriter writer = new FileWriter(stdoutFile, false)) {
+                    try (FileWriter writer =
+                                 new FileWriter(stdoutFile, stdoutAppend)) {
                         writer.write(output.toString());
                     }
                 } else {
@@ -184,7 +195,8 @@ public class Main {
                 }
 
                 if (stdoutFile != null) {
-                    try (FileWriter writer = new FileWriter(stdoutFile, false)) {
+                    try (FileWriter writer =
+                                 new FileWriter(stdoutFile, stdoutAppend)) {
                         writer.write(result + System.lineSeparator());
                     }
                 } else {
@@ -215,7 +227,15 @@ public class Main {
                         pb.redirectInput(ProcessBuilder.Redirect.INHERIT);
 
                         if (stdoutFile != null) {
-                            pb.redirectOutput(new File(stdoutFile));
+
+                            if (stdoutAppend) {
+                                pb.redirectOutput(
+                                        ProcessBuilder.Redirect.appendTo(
+                                                new File(stdoutFile)));
+                            } else {
+                                pb.redirectOutput(new File(stdoutFile));
+                            }
+
                         } else {
                             pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
                         }
@@ -238,7 +258,8 @@ public class Main {
                     String errorMessage = command + ": command not found";
 
                     if (stderrFile != null) {
-                        try (FileWriter writer = new FileWriter(stderrFile, false)) {
+                        try (FileWriter writer =
+                                     new FileWriter(stderrFile, false)) {
                             writer.write(errorMessage + System.lineSeparator());
                         }
                     } else {
