@@ -8,7 +8,7 @@ public class Main {
             System.out.print("$ ");
             String input = sc.nextLine();
 
-            if (input.equals("exit 0")) {
+            if (input.equals("exit")) {
                 break;
             }
 
