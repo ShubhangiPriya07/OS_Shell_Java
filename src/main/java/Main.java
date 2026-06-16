@@ -85,7 +85,9 @@ public class Main {
 
             String stdoutFile = null;
             String stderrFile = null;
+
             boolean stdoutAppend = false;
+            boolean stderrAppend = false;
 
             List<String> commandParts = new ArrayList<>();
 
@@ -110,6 +112,15 @@ public class Main {
                 else if (parts[i].equals("2>")) {
                     if (i + 1 < parts.length) {
                         stderrFile = parts[i + 1];
+                        stderrAppend = false;
+                    }
+                    i++;
+                }
+
+                else if (parts[i].equals("2>>")) {
+                    if (i + 1 < parts.length) {
+                        stderrFile = parts[i + 1];
+                        stderrAppend = true;
                     }
                     i++;
                 }
@@ -154,7 +165,7 @@ public class Main {
                 }
 
                 if (stderrFile != null) {
-                    new FileWriter(stderrFile, false).close();
+                    new FileWriter(stderrFile, stderrAppend).close();
                 }
             }
 
@@ -163,7 +174,7 @@ public class Main {
                 if (parts.length < 2) {
 
                     if (stderrFile != null) {
-                        new FileWriter(stderrFile, false).close();
+                        new FileWriter(stderrFile, stderrAppend).close();
                     }
 
                     continue;
@@ -204,7 +215,7 @@ public class Main {
                 }
 
                 if (stderrFile != null) {
-                    new FileWriter(stderrFile, false).close();
+                    new FileWriter(stderrFile, stderrAppend).close();
                 }
             }
 
@@ -241,7 +252,15 @@ public class Main {
                         }
 
                         if (stderrFile != null) {
-                            pb.redirectError(new File(stderrFile));
+
+                            if (stderrAppend) {
+                                pb.redirectError(
+                                        ProcessBuilder.Redirect.appendTo(
+                                                new File(stderrFile)));
+                            } else {
+                                pb.redirectError(new File(stderrFile));
+                            }
+
                         } else {
                             pb.redirectError(ProcessBuilder.Redirect.INHERIT);
                         }
@@ -259,7 +278,7 @@ public class Main {
 
                     if (stderrFile != null) {
                         try (FileWriter writer =
-                                     new FileWriter(stderrFile, false)) {
+                                     new FileWriter(stderrFile, stderrAppend)) {
                             writer.write(errorMessage + System.lineSeparator());
                         }
                     } else {
