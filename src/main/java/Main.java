@@ -14,19 +14,38 @@ public class Main {
         for (int i = 0; i < input.length(); i++) {
             char c = input.charAt(i);
 
-            // Backslash escaping outside quotes
-            if (c == '\\' && !inSingleQuotes && !inDoubleQuotes) {
+            // Backslashes inside double quotes
+            if (inDoubleQuotes && c == '\\') {
+                if (i + 1 < input.length()) {
+                    char next = input.charAt(i + 1);
+
+                    if (next == '"' || next == '\\') {
+                        current.append(next);
+                        i++;
+                    } else {
+                        current.append('\\');
+                    }
+                } else {
+                    current.append('\\');
+                }
+            }
+
+            // Backslashes outside quotes
+            else if (c == '\\' && !inSingleQuotes && !inDoubleQuotes) {
                 if (i + 1 < input.length()) {
                     current.append(input.charAt(i + 1));
                     i++;
                 }
             }
+
             else if (c == '\'' && !inDoubleQuotes) {
                 inSingleQuotes = !inSingleQuotes;
             }
+
             else if (c == '"' && !inSingleQuotes) {
                 inDoubleQuotes = !inDoubleQuotes;
             }
+
             else if (Character.isWhitespace(c)
                     && !inSingleQuotes
                     && !inDoubleQuotes) {
@@ -36,6 +55,7 @@ public class Main {
                     current.setLength(0);
                 }
             }
+
             else {
                 current.append(c);
             }
