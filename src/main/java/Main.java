@@ -1,9 +1,9 @@
-import java.io.File;
-import java.io.FileWriter;
-import java.util.Scanner;
-import java.util.Arrays;
-import java.util.ArrayList;
-import java.util.List;
+import java.io.*;
+import java.util.*;
+
+import org.jline.reader.*;
+import org.jline.reader.impl.*;
+import org.jline.terminal.*;
 
 public class Main {
 
@@ -71,11 +71,35 @@ public class Main {
     }
 
     public static void main(String[] args) throws Exception {
-        Scanner sc = new Scanner(System.in);
+
+        Terminal terminal = TerminalBuilder.builder()
+                .system(true)
+                .build();
+
+        Completer completer = (LineReader reader,
+                               ParsedLine line,
+                               List<Candidate> candidates) -> {
+
+            String word = line.word();
+
+            if ("echo".startsWith(word)) {
+                candidates.add(new Candidate("echo"));
+            }
+
+            if ("exit".startsWith(word)) {
+                candidates.add(new Candidate("exit"));
+            }
+        };
+
+        LineReader reader = LineReaderBuilder.builder()
+                .terminal(terminal)
+                .parser(new DefaultParser())
+                .completer(completer)
+                .build();
 
         while (true) {
-            System.out.print("$ ");
-            String input = sc.nextLine();
+
+            String input = reader.readLine("$ ");
 
             String[] parts = parseCommand(input);
 
@@ -169,58 +193,7 @@ public class Main {
                 }
             }
 
-            else if (command.equals("type")) {
-
-                if (parts.length < 2) {
-
-                    if (stderrFile != null) {
-                        new FileWriter(stderrFile, stderrAppend).close();
-                    }
-
-                    continue;
-                }
-
-                String cmd = parts[1];
-                String result;
-
-                if (cmd.equals("echo")
-                        || cmd.equals("exit")
-                        || cmd.equals("type")) {
-
-                    result = cmd + " is a shell builtin";
-                } else {
-
-                    String pathEnv = System.getenv("PATH");
-                    String[] paths = pathEnv.split(File.pathSeparator);
-
-                    result = cmd + ": not found";
-
-                    for (String path : paths) {
-                        File file = new File(path, cmd);
-
-                        if (file.exists() && file.canExecute()) {
-                            result = cmd + " is " + file.getAbsolutePath();
-                            break;
-                        }
-                    }
-                }
-
-                if (stdoutFile != null) {
-                    try (FileWriter writer =
-                                 new FileWriter(stdoutFile, stdoutAppend)) {
-                        writer.write(result + System.lineSeparator());
-                    }
-                } else {
-                    System.out.println(result);
-                }
-
-                if (stderrFile != null) {
-                    new FileWriter(stderrFile, stderrAppend).close();
-                }
-            }
-
             else {
-
                 String pathEnv = System.getenv("PATH");
                 String[] paths = pathEnv.split(File.pathSeparator);
 
@@ -287,7 +260,5 @@ public class Main {
                 }
             }
         }
-
-        sc.close();
     }
 }
