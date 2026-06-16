@@ -1,5 +1,8 @@
 import java.io.File;
-import java.util.*;
+import java.util.Scanner;
+import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.List;
 
 public class Main {
 
@@ -14,6 +17,7 @@ public class Main {
         for (int i = 0; i < input.length(); i++) {
             char c = input.charAt(i);
 
+            // Backslashes inside double quotes
             if (inDoubleQuotes && c == '\\') {
                 if (i + 1 < input.length()) {
                     char next = input.charAt(i + 1);
@@ -29,6 +33,7 @@ public class Main {
                 }
             }
 
+            // Backslashes outside quotes
             else if (c == '\\' && !inSingleQuotes && !inDoubleQuotes) {
                 if (i + 1 < input.length()) {
                     current.append(input.charAt(i + 1));
@@ -107,8 +112,8 @@ public class Main {
                         || cmd.equals("type")) {
 
                     System.out.println(cmd + " is a shell builtin");
-                }
-                else {
+                } else {
+
                     String pathEnv = System.getenv("PATH");
                     String[] paths = pathEnv.split(File.pathSeparator);
 
@@ -118,8 +123,7 @@ public class Main {
                         File file = new File(path, cmd);
 
                         if (file.exists() && file.canExecute()) {
-                            System.out.println(
-                                    cmd + " is " + file.getAbsolutePath());
+                            System.out.println(cmd + " is " + file.getAbsolutePath());
                             found = true;
                             break;
                         }
@@ -142,15 +146,8 @@ public class Main {
 
                     if (file.exists() && file.canExecute()) {
 
-                        List<String> processArgs = new ArrayList<>();
-                        processArgs.add(file.getAbsolutePath());
-
-                        for (int i = 1; i < parts.length; i++) {
-                            processArgs.add(parts[i]);
-                        }
-
                         ProcessBuilder pb =
-                                new ProcessBuilder(processArgs);
+                                new ProcessBuilder(Arrays.asList(parts));
 
                         pb.inheritIO();
 
