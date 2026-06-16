@@ -1,5 +1,6 @@
 import java.io.File;
 import java.util.Scanner;
+import java.util.Arrays;
 
 public class Main {
     public static void main(String[] args) throws Exception {
@@ -49,7 +50,32 @@ public class Main {
             }
 
             else {
-                System.out.println(input + ": command not found");
+                String[] parts = input.split(" ");
+                String command = parts[0];
+
+                String pathEnv = System.getenv("PATH");
+                String[] paths = pathEnv.split(File.pathSeparator);
+
+                boolean found = false;
+
+                for (String path : paths) {
+                    File file = new File(path, command);
+
+                    if (file.exists() && file.canExecute()) {
+                        ProcessBuilder pb = new ProcessBuilder(Arrays.asList(parts));
+                        pb.inheritIO();
+
+                        Process process = pb.start();
+                        process.waitFor();
+
+                        found = true;
+                        break;
+                    }
+                }
+
+                if (!found) {
+                    System.out.println(command + ": command not found");
+                }
             }
         }
     }
