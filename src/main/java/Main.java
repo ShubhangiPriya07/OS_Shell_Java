@@ -1,8 +1,36 @@
 import java.io.File;
-import java.util.Scanner;
-import java.util.Arrays;
+import java.util.*;
 
 public class Main {
+
+    private static String[] parseCommand(String input) {
+        List<String> args = new ArrayList<>();
+
+        StringBuilder current = new StringBuilder();
+        boolean inSingleQuotes = false;
+
+        for (int i = 0; i < input.length(); i++) {
+            char c = input.charAt(i);
+
+            if (c == '\'') {
+                inSingleQuotes = !inSingleQuotes;
+            } else if (Character.isWhitespace(c) && !inSingleQuotes) {
+                if (current.length() > 0) {
+                    args.add(current.toString());
+                    current.setLength(0);
+                }
+            } else {
+                current.append(c);
+            }
+        }
+
+        if (current.length() > 0) {
+            args.add(current.toString());
+        }
+
+        return args.toArray(new String[0]);
+    }
+
     public static void main(String[] args) throws Exception {
         Scanner sc = new Scanner(System.in);
 
@@ -10,22 +38,40 @@ public class Main {
             System.out.print("$ ");
             String input = sc.nextLine();
 
-            if (input.equals("exit")) {
+            String[] parts = parseCommand(input);
+
+            if (parts.length == 0) {
+                continue;
+            }
+
+            String command = parts[0];
+
+            if (command.equals("exit")) {
                 break;
             }
 
-            if (input.startsWith("echo ")) {
-                System.out.println(input.substring(5));
+            else if (command.equals("echo")) {
+                for (int i = 1; i < parts.length; i++) {
+                    if (i > 1) {
+                        System.out.print(" ");
+                    }
+                    System.out.print(parts[i]);
+                }
+                System.out.println();
             }
 
-            else if (input.startsWith("type ")) {
-                String command = input.substring(5);
+            else if (command.equals("type")) {
+                if (parts.length < 2) {
+                    continue;
+                }
 
-                if (command.equals("echo") ||
-                    command.equals("exit") ||
-                    command.equals("type")) {
+                String cmd = parts[1];
 
-                    System.out.println(command + " is a shell builtin");
+                if (cmd.equals("echo") ||
+                    cmd.equals("exit") ||
+                    cmd.equals("type")) {
+
+                    System.out.println(cmd + " is a shell builtin");
                 } else {
 
                     String pathEnv = System.getenv("PATH");
@@ -34,25 +80,22 @@ public class Main {
                     boolean found = false;
 
                     for (String path : paths) {
-                        File file = new File(path, command);
+                        File file = new File(path, cmd);
 
                         if (file.exists() && file.canExecute()) {
-                            System.out.println(command + " is " + file.getAbsolutePath());
+                            System.out.println(cmd + " is " + file.getAbsolutePath());
                             found = true;
                             break;
                         }
                     }
 
                     if (!found) {
-                        System.out.println(command + ": not found");
+                        System.out.println(cmd + ": not found");
                     }
                 }
             }
 
             else {
-                String[] parts = input.split(" ");
-                String command = parts[0];
-
                 String pathEnv = System.getenv("PATH");
                 String[] paths = pathEnv.split(File.pathSeparator);
 
@@ -78,5 +121,7 @@ public class Main {
                 }
             }
         }
+
+        sc.close();
     }
 }
