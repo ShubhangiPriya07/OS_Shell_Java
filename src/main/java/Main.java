@@ -83,17 +83,30 @@ public class Main {
                 continue;
             }
 
-            String outputFile = null;
+            String stdoutFile = null;
+            String stderrFile = null;
+
             List<String> commandParts = new ArrayList<>();
 
             for (int i = 0; i < parts.length; i++) {
+
                 if (parts[i].equals(">") || parts[i].equals("1>")) {
                     if (i + 1 < parts.length) {
-                        outputFile = parts[i + 1];
+                        stdoutFile = parts[i + 1];
                     }
-                    break;
+                    i++;
                 }
-                commandParts.add(parts[i]);
+
+                else if (parts[i].equals("2>")) {
+                    if (i + 1 < parts.length) {
+                        stderrFile = parts[i + 1];
+                    }
+                    i++;
+                }
+
+                else {
+                    commandParts.add(parts[i]);
+                }
             }
 
             parts = commandParts.toArray(new String[0]);
@@ -109,6 +122,7 @@ public class Main {
             }
 
             else if (command.equals("echo")) {
+
                 StringBuilder output = new StringBuilder();
 
                 for (int i = 1; i < parts.length; i++) {
@@ -120,17 +134,27 @@ public class Main {
 
                 output.append(System.lineSeparator());
 
-                if (outputFile != null) {
-                    try (FileWriter writer = new FileWriter(outputFile, false)) {
+                if (stdoutFile != null) {
+                    try (FileWriter writer = new FileWriter(stdoutFile, false)) {
                         writer.write(output.toString());
                     }
                 } else {
                     System.out.print(output);
                 }
+
+                if (stderrFile != null) {
+                    new FileWriter(stderrFile, false).close();
+                }
             }
 
             else if (command.equals("type")) {
+
                 if (parts.length < 2) {
+
+                    if (stderrFile != null) {
+                        new FileWriter(stderrFile, false).close();
+                    }
+
                     continue;
                 }
 
@@ -159,22 +183,28 @@ public class Main {
                     }
                 }
 
-                if (outputFile != null) {
-                    try (FileWriter writer = new FileWriter(outputFile, false)) {
+                if (stdoutFile != null) {
+                    try (FileWriter writer = new FileWriter(stdoutFile, false)) {
                         writer.write(result + System.lineSeparator());
                     }
                 } else {
                     System.out.println(result);
                 }
+
+                if (stderrFile != null) {
+                    new FileWriter(stderrFile, false).close();
+                }
             }
 
             else {
+
                 String pathEnv = System.getenv("PATH");
                 String[] paths = pathEnv.split(File.pathSeparator);
 
                 boolean found = false;
 
                 for (String path : paths) {
+
                     File file = new File(path, command);
 
                     if (file.exists() && file.canExecute()) {
@@ -183,12 +213,17 @@ public class Main {
                                 new ProcessBuilder(Arrays.asList(parts));
 
                         pb.redirectInput(ProcessBuilder.Redirect.INHERIT);
-                        pb.redirectError(ProcessBuilder.Redirect.INHERIT);
 
-                        if (outputFile != null) {
-                            pb.redirectOutput(new File(outputFile));
+                        if (stdoutFile != null) {
+                            pb.redirectOutput(new File(stdoutFile));
                         } else {
                             pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+                        }
+
+                        if (stderrFile != null) {
+                            pb.redirectError(new File(stderrFile));
+                        } else {
+                            pb.redirectError(ProcessBuilder.Redirect.INHERIT);
                         }
 
                         Process process = pb.start();
@@ -200,7 +235,15 @@ public class Main {
                 }
 
                 if (!found) {
-                    System.out.println(command + ": command not found");
+                    String errorMessage = command + ": command not found";
+
+                    if (stderrFile != null) {
+                        try (FileWriter writer = new FileWriter(stderrFile, false)) {
+                            writer.write(errorMessage + System.lineSeparator());
+                        }
+                    } else {
+                        System.out.println(errorMessage);
+                    }
                 }
             }
         }
