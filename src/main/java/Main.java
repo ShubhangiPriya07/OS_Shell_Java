@@ -23,7 +23,7 @@ public class Main {
         long pid;
         String command;
         String status;
-        Process process; // Added reference to the underlying native process hook
+        Process process;
 
         public Job(int id, long pid, String command, String status, Process process) {
             this.id = id;
@@ -208,7 +208,7 @@ public class Main {
                                 if (lcp.length() > argv2.length()) {
                                     String addition = lcp.substring(argv2.length());
                                     System.out.print(addition);
-                                    System.flush();
+                                    System.out.flush();
                                     currentLine.append(addition);
                                     
                                     tabCount = 0;
@@ -652,13 +652,10 @@ public class Main {
             }
         }
 
-        // UPDATED: Added reaping validation checks on process exit states inside the jobs execution block
         else if (command.equals("jobs")) {
-            // Step 1: Poll active processes to detect normal exits cleanly
             for (Job job : backgroundJobs) {
                 if (job.status.equals("Running") && !job.process.isAlive()) {
                     job.status = "Done";
-                    // Strip the trailing " &" from the command display string if the task is finished
                     if (job.command.endsWith(" &")) {
                         job.command = job.command.substring(0, job.command.length() - 2);
                     }
@@ -668,7 +665,6 @@ public class Main {
             StringBuilder output = new StringBuilder();
             int totalJobs = backgroundJobs.size();
 
-            // Step 2: Render out formatted metadata logs
             for (int i = 0; i < totalJobs; i++) {
                 Job job = backgroundJobs.get(i);
                 char marker = ' ';
@@ -683,7 +679,6 @@ public class Main {
                 output.append(line);
             }
 
-            // Step 3: Evict completed "Done" specifications from table completely so they drop on subsequent calls
             Iterator<Job> iterator = backgroundJobs.iterator();
             while (iterator.hasNext()) {
                 if (iterator.next().status.equals("Done")) {
@@ -750,7 +745,6 @@ public class Main {
                         }
                         fullCmd.append(" &");
 
-                        // Pass the process instantiation handle to the tracking object instance directly
                         backgroundJobs.add(new Job(nextJobId, process.pid(), fullCmd.toString(), "Running", process));
                         nextJobId++;
                     } else {
