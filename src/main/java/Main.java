@@ -14,7 +14,6 @@ import java.util.Map;
 import java.util.Set;
 
 public class Main {
-    // REGISTERED: Added "jobs" to the shell's builtin array
     private static final List<String> BUILTINS = List.of("echo", "exit", "type", "complete", "jobs");
     private static final Map<String, String> registeredCompletions = new HashMap<>();
     
@@ -299,7 +298,7 @@ public class Main {
                             lastTabPrefix = "";
                         } else {
                             if (input.equals(lastTabPrefix)) {
-                                tabCount++;
+                                ++tabCount;
                             } else {
                                 lastTabPrefix = input;
                                 tabCount = 1;
@@ -515,6 +514,18 @@ public class Main {
             return;
         }
 
+        // --- UPDATED: Background Execution "&" Token Interception Logic ---
+        boolean isBackgroundJob = false;
+        if (parts[parts.length - 1].equals("&")) {
+            isBackgroundJob = true;
+            // Slice out the trailing '&' character from final command processing elements
+            parts = Arrays.copyOf(parts, parts.length - 1);
+        }
+
+        if (parts.length == 0) {
+            return;
+        }
+
         String command = parts[0];
 
         if (command.equals("exit")) {
@@ -623,7 +634,6 @@ public class Main {
             }
         }
 
-        // ADDED: Jobs execution block (safely intercepts output redirects for future scaling)
         else if (command.equals("jobs")) {
             if (stderrFile != null) {
                 new FileWriter(stderrFile, stderrAppend).close();
@@ -664,7 +674,15 @@ public class Main {
                     }
 
                     Process process = pb.start();
-                    process.waitFor();
+
+                    // UPDATED: Async Background routing control mechanism
+                    if (isBackgroundJob) {
+                        // Print the required [JOB_NUMBER] PID output block asynchronously
+                        System.out.println("[1] " + process.pid());
+                    } else {
+                        // Foreground tasks wait for exit codes explicitly
+                        process.waitFor();
+                    }
 
                     found = true;
                     break;
