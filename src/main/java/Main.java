@@ -9,6 +9,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -22,12 +23,14 @@ public class Main {
         long pid;
         String command;
         String status;
+        Process process; // Added reference to the underlying native process hook
 
-        public Job(int id, long pid, String command, String status) {
+        public Job(int id, long pid, String command, String status, Process process) {
             this.id = id;
             this.pid = pid;
             this.command = command;
             this.status = status;
+            this.process = process;
         }
     }
 
@@ -149,7 +152,7 @@ public class Main {
 
                     // --- CASE A1: REGISTERED COMPLETER SCRIPT EXECUTION ---
                     if (registeredCompletions.containsKey(primaryCommand)) {
-                        String scriptPath = registeredCompletions.get(primaryCommand); // FIXED: targetCommand -> primaryCommand
+                        String scriptPath = registeredCompletions.get(primaryCommand);
                         
                         String[] words = input.split("\\s+");
                         String argv1 = primaryCommand;
@@ -205,7 +208,7 @@ public class Main {
                                 if (lcp.length() > argv2.length()) {
                                     String addition = lcp.substring(argv2.length());
                                     System.out.print(addition);
-                                    System.out.flush();
+                                    System.flush();
                                     currentLine.append(addition);
                                     
                                     tabCount = 0;
@@ -323,7 +326,7 @@ public class Main {
 
                             if (tabCount == 1) {
                                 System.out.print("\u0007");
-                                System.out.flush(); // FIXED: System.flush() -> System.out.flush()
+                                System.out.flush();
                             } else if (tabCount >= 2) {
                                 System.out.println();
                                 for (int i = 0; i < fileMatches.size(); i++) {
@@ -649,10 +652,23 @@ public class Main {
             }
         }
 
+        // UPDATED: Added reaping validation checks on process exit states inside the jobs execution block
         else if (command.equals("jobs")) {
+            // Step 1: Poll active processes to detect normal exits cleanly
+            for (Job job : backgroundJobs) {
+                if (job.status.equals("Running") && !job.process.isAlive()) {
+                    job.status = "Done";
+                    // Strip the trailing " &" from the command display string if the task is finished
+                    if (job.command.endsWith(" &")) {
+                        job.command = job.command.substring(0, job.command.length() - 2);
+                    }
+                }
+            }
+
             StringBuilder output = new StringBuilder();
             int totalJobs = backgroundJobs.size();
 
+            // Step 2: Render out formatted metadata logs
             for (int i = 0; i < totalJobs; i++) {
                 Job job = backgroundJobs.get(i);
                 char marker = ' ';
@@ -665,6 +681,14 @@ public class Main {
 
                 String line = String.format("[%d]%c  %-24s%s%n", job.id, marker, job.status, job.command);
                 output.append(line);
+            }
+
+            // Step 3: Evict completed "Done" specifications from table completely so they drop on subsequent calls
+            Iterator<Job> iterator = backgroundJobs.iterator();
+            while (iterator.hasNext()) {
+                if (iterator.next().status.equals("Done")) {
+                    iterator.remove();
+                }
             }
 
             if (stdoutFile != null) {
@@ -726,7 +750,8 @@ public class Main {
                         }
                         fullCmd.append(" &");
 
-                        backgroundJobs.add(new Job(nextJobId, process.pid(), fullCmd.toString(), "Running"));
+                        // Pass the process instantiation handle to the tracking object instance directly
+                        backgroundJobs.add(new Job(nextJobId, process.pid(), fullCmd.toString(), "Running", process));
                         nextJobId++;
                     } else {
                         process.waitFor();
