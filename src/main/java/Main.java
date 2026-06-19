@@ -2,11 +2,12 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.Arrays;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public class Main {
+    private static final List<String> BUILTINS = List.of("echo", "exit", "type");
 
     private static String[] parseCommand(String input) {
         List<String> args = new ArrayList<>();
@@ -71,311 +72,286 @@ public class Main {
     }
 
     public static void main(String[] args) throws Exception {
-        String originalState = getSttyState();
-        
+        configureTerminalMode("-icanon -echo");
+
         try {
-            setRawMode();
-            StringBuilder currentLine = new StringBuilder();
-            
-            System.out.print("$ ");
-            System.out.flush();
+            runShellLoop();
+        } finally {
+            configureTerminalMode("icanon echo");
+        }
+    }
 
-            InputStream in = System.in;
+    private static void runShellLoop() throws Exception {
+        StringBuilder currentLine = new StringBuilder();
+        System.out.print("$ ");
+        System.out.flush();
 
-            while (true) {
-                int c = in.read();
-                if (c == -1) break; 
+        InputStream in = System.in;
 
-                // 1. Handle TAB Autocompletion (ASCII 9)
-                if (c == 9) {
-                    String typed = currentLine.toString();
-                    if (!typed.isEmpty()) {
-                        if ("echo".startsWith(typed)) {
-                            String completion = "echo".substring(typed.length()) + " ";
-                            currentLine.append(completion);
-                            System.out.print(completion);
-                            System.out.flush();
-                        } else if ("exit".startsWith(typed)) {
-                            String completion = "exit".substring(typed.length()) + " ";
-                            currentLine.append(completion);
-                            System.out.print(completion);
-                            System.out.flush();
-                        }
-                    }
-                } 
-                // 2. Handle Carriage Return / Line Feed (ASCII 13 or 10)
-                else if (c == 10 || c == 13) {
-                    System.out.print("\r\n");
+        while (true) {
+            int c = in.read();
+
+            if (c == -1) {
+                break;
+            }
+
+            // 1. Handle Tab key
+            if (c == '\t') {
+                String input = currentLine.toString();
+                
+                // If they are inside an argument, ring the bell and do nothing
+                if (input.contains(" ") || input.isEmpty()) {
+                    System.out.print("\u0007"); // Print bell character (\x07)
                     System.out.flush();
+                    continue;
+                }
 
-                    String input = currentLine.toString();
-                    currentLine.setLength(0); 
-
-                    String[] parts = parseCommand(input);
-
-                    if (parts.length == 0) {
-                        System.out.print("$ ");
-                        System.out.flush();
-                        continue;
+                List<String> matches = new ArrayList<>();
+                for (String builtin : BUILTINS) {
+                    if (builtin.startsWith(input)) {
+                        matches.add(builtin);
                     }
+                }
 
-                    String stdoutFile = null;
-                    String stderrFile = null;
-
-                    boolean stdoutAppend = false;
-                    boolean stderrAppend = false;
-
-                    List<String> commandParts = new ArrayList<>();
-
-                    for (int i = 0; i < parts.length; i++) {
-                        if (parts[i].equals(">") || parts[i].equals("1>")) {
-                            if (i + 1 < parts.length) {
-                                stdoutFile = parts[i + 1];
-                                stdoutAppend = false;
-                            }
-                            i++;
-                        }
-                        else if (parts[i].equals(">>") || parts[i].equals("1>>")) {
-                            if (i + 1 < parts.length) {
-                                stdoutFile = parts[i + 1];
-                                stdoutAppend = true;
-                            }
-                            i++;
-                        }
-                        else if (parts[i].equals("2>")) {
-                            if (i + 1 < parts.length) {
-                                stderrFile = parts[i + 1];
-                                stderrAppend = false;
-                            }
-                            i++;
-                        }
-                        else if (parts[i].equals("2>>")) {
-                            if (i + 1 < parts.length) {
-                                stderrFile = parts[i + 1];
-                                stderrAppend = true;
-                            }
-                            i++;
-                        }
-                        else {
-                            commandParts.add(parts[i]);
-                        }
-                    }
-
-                    parts = commandParts.toArray(new String[0]);
-
-                    if (parts.length == 0) {
-                        System.out.print("$ ");
-                        System.out.flush();
-                        continue;
-                    }
-
-                    String command = parts[0];
-
-                    if (command.equals("exit")) {
-                        break;
-                    }
-
-                    else if (command.equals("echo")) {
-                        StringBuilder output = new StringBuilder();
-
-                        for (int i = 1; i < parts.length; i++) {
-                            if (i > 1) {
-                                output.append(" ");
-                            }
-                            output.append(parts[i]);
-                        }
-
-                        output.append(System.lineSeparator());
-
-                        if (stdoutFile != null) {
-                            try (FileWriter writer =
-                                         new FileWriter(stdoutFile, stdoutAppend)) {
-                                writer.write(output.toString());
-                            }
-                        } else {
-                            System.out.print(output.toString().replace("\n", "\r\n"));
-                            System.out.flush();
-                        }
-
-                        if (stderrFile != null) {
-                            new FileWriter(stderrFile, stderrAppend).close();
-                        }
-                    }
-
-                    else if (command.equals("type")) {
-                        if (parts.length > 1) {
-                            String target = parts[1];
-                            if (target.equals("echo") || target.equals("exit") || target.equals("type")) {
-                                String msg = target + " is a shell builtin\r\n";
-                                if (stdoutFile != null) {
-                                    try (FileWriter writer = new FileWriter(stdoutFile, stdoutAppend)) {
-                                        writer.write(target + " is a shell builtin\n");
-                                    }
-                                } else {
-                                    System.out.print(msg);
-                                    System.out.flush();
-                                }
-                            } else {
-                                String pathEnv = System.getenv("PATH");
-                                String[] paths = pathEnv.split(File.pathSeparator);
-                                boolean pathFound = false;
-
-                                for (String path : paths) {
-                                    File file = new File(path, target);
-                                    if (file.exists() && file.canExecute()) {
-                                        String msg = target + " is " + file.getAbsolutePath() + "\r\n";
-                                        if (stdoutFile != null) {
-                                            try (FileWriter writer = new FileWriter(stdoutFile, stdoutAppend)) {
-                                                writer.write(target + " is " + file.getAbsolutePath() + "\n");
-                                            }
-                                        } else {
-                                            System.out.print(msg);
-                                            System.out.flush();
-                                        }
-                                        pathFound = true;
-                                        break;
-                                    }
-                                }
-
-                                if (!pathFound) {
-                                    String errMsg = target + ": not found\r\n";
-                                    if (stderrFile != null) {
-                                        try (FileWriter writer = new FileWriter(stderrFile, stderrAppend)) {
-                                            writer.write(target + ": not found\n");
-                                        }
-                                    } else {
-                                        System.out.print(errMsg);
-                                        System.out.flush();
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    else {
-                        String pathEnv = System.getenv("PATH");
-                        String[] paths = pathEnv.split(File.pathSeparator);
-
-                        boolean found = false;
-
-                        for (String path : paths) {
-                            File file = new File(path, command);
-
-                            if (file.exists() && file.canExecute()) {
-                                ProcessBuilder pb =
-                                        new ProcessBuilder(Arrays.asList(parts));
-
-                                pb.redirectInput(ProcessBuilder.Redirect.INHERIT);
-
-                                if (stdoutFile != null) {
-                                    if (stdoutAppend) {
-                                        pb.redirectOutput(
-                                                ProcessBuilder.Redirect.appendTo(
-                                                        new File(stdoutFile)));
-                                    } else {
-                                        pb.redirectOutput(new File(stdoutFile));
-                                    }
-                                } else {
-                                    pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
-                                }
-
-                                if (stderrFile != null) {
-                                    if (stderrAppend) {
-                                        pb.redirectError(
-                                                ProcessBuilder.Redirect.appendTo(
-                                                        new File(stderrFile)));
-                                    } else {
-                                        pb.redirectError(new File(stderrFile));
-                                    }
-                                } else {
-                                    pb.redirectError(ProcessBuilder.Redirect.INHERIT);
-                                }
-
-                                restoreTerminal(originalState);
-                                Process process = pb.start();
-                                process.waitFor();
-                                setRawMode(); 
-
-                                found = true;
-                                break;
-                            }
-                        }
-
-                        if (!found) {
-                            String errorMessage = command + ": command not found";
-
-                            if (stderrFile != null) {
-                                try (FileWriter writer =
-                                             new FileWriter(stderrFile, stderrAppend)) {
-                                    writer.write(errorMessage + System.lineSeparator());
-                                }
-                            } else {
-                                System.out.print(errorMessage + "\r\n");
-                                System.out.flush();
-                            }
-                        }
-                    }
-
-                    System.out.print("$ ");
+                // If exactly one match is found, autocomplete it with a trailing space
+                if (matches.size() == 1) {
+                    String completed = matches.get(0) + " ";
+                    String addition = completed.substring(input.length());
+                    System.out.print(addition);
                     System.out.flush();
-                } 
-                // 3. Handle Backspace (ASCII 127 or 8)
-                else if (c == 127 || c == 8) {
-                    if (currentLine.length() > 0) {
-                        currentLine.deleteCharAt(currentLine.length() - 1);
-                        System.out.print("\b \b");
-                        System.out.flush();
-                    }
-                } 
-                // 4. Handle regular printable input characters
-                else if (c >= 32 && c <= 126) {
-                    currentLine.append((char) c);
-                    System.out.print((char) c);
+                    currentLine.append(addition);
+                } else {
+                    // Critical Requirement: If no matches or multiple matches exist, ring the bell!
+                    System.out.print("\u0007"); // Print bell character (\x07)
                     System.out.flush();
                 }
+                continue;
             }
-        } finally {
-            restoreTerminal(originalState);
+
+            // 2. Handle Newline
+            if (c == '\n' || c == '\r') {
+                System.out.println();
+                String commandLine = currentLine.toString();
+
+                processCommandLine(commandLine);
+
+                currentLine.setLength(0);
+                System.out.print("$ ");
+                System.out.flush();
+                continue;
+            }
+
+            // 3. Handle Backspace
+            if (c == 127 || c == 8) {
+                if (currentLine.length() > 0) {
+                    currentLine.deleteCharAt(currentLine.length() - 1);
+                    System.out.print("\b \b");
+                    System.out.flush();
+                }
+                continue;
+            }
+
+            // 4. Handle standard typing input
+            char ch = (char) c;
+            System.out.print(ch);
+            System.out.flush();
+            currentLine.append(ch);
         }
     }
 
-    // --- Native Terminal Controls ---
+    private static void processCommandLine(String input) throws Exception {
+        String[] parts = parseCommand(input);
 
-    private static String getSttyState() {
-        try {
-            return runCommand(new String[]{"/bin/sh", "-c", "stty -g < /dev/tty"}).trim();
-        } catch (Exception e) {
-            return "";
+        if (parts.length == 0) {
+            return;
         }
-    }
 
-    private static void setRawMode() {
-        try {
-            runCommand(new String[]{"/bin/sh", "-c", "stty raw -echo < /dev/tty"});
-        } catch (Exception e) {
-            try {
-                runCommand(new String[]{"/bin/sh", "-c", "stty raw -echo"});
-            } catch (Exception ignored) {}
+        String stdoutFile = null;
+        String stderrFile = null;
+
+        boolean stdoutAppend = false;
+        boolean stderrAppend = false;
+
+        List<String> commandParts = new ArrayList<>();
+
+        for (int i = 0; i < parts.length; i++) {
+            if (parts[i].equals(">") || parts[i].equals("1>")) {
+                if (i + 1 < parts.length) {
+                    stdoutFile = parts[i + 1];
+                    stdoutAppend = false;
+                }
+                i++;
+            }
+
+            else if (parts[i].equals(">>") || parts[i].equals("1>>")) {
+                if (i + 1 < parts.length) {
+                    stdoutFile = parts[i + 1];
+                    stdoutAppend = true;
+                }
+                i++;
+            }
+
+            else if (parts[i].equals("2>")) {
+                if (i + 1 < parts.length) {
+                    stderrFile = parts[i + 1];
+                    stderrAppend = false;
+                }
+                i++;
+            }
+
+            else if (parts[i].equals("2>>")) {
+                if (i + 1 < parts.length) {
+                    stderrFile = parts[i + 1];
+                    stderrAppend = true;
+                }
+                i++;
+            }
+
+            else {
+                commandParts.add(parts[i]);
+            }
         }
-    }
 
-    private static void restoreTerminal(String originalState) {
-        try {
-            if (!originalState.isEmpty()) {
-                runCommand(new String[]{"/bin/sh", "-c", "stty " + originalState + " < /dev/tty"});
+        parts = commandParts.toArray(new String[0]);
+
+        if (parts.length == 0) {
+            return;
+        }
+
+        String command = parts[0];
+
+        if (command.equals("exit")) {
+            configureTerminalMode("icanon echo");
+            System.exit(0);
+        }
+
+        else if (command.equals("echo")) {
+            StringBuilder output = new StringBuilder();
+
+            for (int i = 1; i < parts.length; i++) {
+                if (i > 1) {
+                    output.append(" ");
+                }
+                output.append(parts[i]);
+            }
+
+            output.append(System.lineSeparator());
+
+            if (stdoutFile != null) {
+                try (FileWriter writer = new FileWriter(stdoutFile, stdoutAppend)) {
+                    writer.write(output.toString());
+                }
             } else {
-                runCommand(new String[]{"/bin/sh", "-c", "stty sane < /dev/tty"});
+                System.out.print(output);
             }
-        } catch (Exception e) {
-            try {
-                runCommand(new String[]{"/bin/sh", "-c", "stty sane"});
-            } catch (Exception ignored) {}
+
+            if (stderrFile != null) {
+                new FileWriter(stderrFile, stderrAppend).close();
+            }
+        }
+
+        else if (command.equals("type")) {
+            if (parts.length < 2) {
+                return;
+            }
+            String target = parts[1];
+            StringBuilder output = new StringBuilder();
+
+            if (BUILTINS.contains(target)) {
+                output.append(target).append(" is a shell builtin").append(System.lineSeparator());
+            } else {
+                String pathEnv = System.getenv("PATH");
+                String[] paths = pathEnv != null ? pathEnv.split(File.pathSeparator) : new String[0];
+                boolean pathFound = false;
+
+                for (String path : paths) {
+                    File file = new File(path, target);
+                    if (file.exists() && file.canExecute()) {
+                        output.append(target).append(" is ").append(file.getAbsolutePath()).append(System.lineSeparator());
+                        pathFound = true;
+                        break;
+                    }
+                }
+
+                if (!pathFound) {
+                    output.append(target).append(": not found").append(System.lineSeparator());
+                }
+            }
+
+            if (stdoutFile != null) {
+                try (FileWriter writer = new FileWriter(stdoutFile, stdoutAppend)) {
+                    writer.write(output.toString());
+                }
+            } else {
+                System.out.print(output);
+            }
+
+            if (stderrFile != null) {
+                new FileWriter(stderrFile, stderrAppend).close();
+            }
+        }
+
+        else {
+            String pathEnv = System.getenv("PATH");
+            String[] paths = pathEnv != null ? pathEnv.split(File.pathSeparator) : new String[0];
+
+            boolean found = false;
+
+            for (String path : paths) {
+                File file = new File(path, command);
+
+                if (file.exists() && file.canExecute()) {
+                    ProcessBuilder pb = new ProcessBuilder(Arrays.asList(parts));
+                    pb.redirectInput(ProcessBuilder.Redirect.INHERIT);
+
+                    if (stdoutFile != null) {
+                        if (stdoutAppend) {
+                            pb.redirectOutput(ProcessBuilder.Redirect.appendTo(new File(stdoutFile)));
+                        } else {
+                            pb.redirectOutput(new File(stdoutFile));
+                        }
+                    } else {
+                        pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+                    }
+
+                    if (stderrFile != null) {
+                        if (stderrAppend) {
+                            pb.redirectError(ProcessBuilder.Redirect.appendTo(new File(stderrFile)));
+                        } else {
+                            pb.redirectError(new File(stderrFile));
+                        }
+                    } else {
+                        pb.redirectError(ProcessBuilder.Redirect.INHERIT);
+                    }
+
+                    Process process = pb.start();
+                    process.waitFor();
+
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found) {
+                String errorMessage = command + ": command not found";
+
+                if (stderrFile != null) {
+                    try (FileWriter writer = new FileWriter(stderrFile, stderrAppend)) {
+                        writer.write(errorMessage + System.lineSeparator());
+                    }
+                } else {
+                    System.out.println(errorMessage);
+                }
+            }
         }
     }
 
-    private static String runCommand(String[] cmd) throws IOException, InterruptedException {
-        Process p = new ProcessBuilder(cmd).start();
-        p.waitFor();
-        return new String(p.getInputStream().readAllBytes());
+    private static void configureTerminalMode(String args) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder("sh", "-c", "stty " + args + " < /dev/tty");
+            pb.inheritIO().start().waitFor();
+        } catch (Exception e) {
+            // Ignore if running without an accessible TTY device
+        }
     }
 }
