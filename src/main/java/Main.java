@@ -4,12 +4,17 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
 public class Main {
     private static final List<String> BUILTINS = List.of("echo", "exit", "type");
+    
+    // Tracking variables for consecutive tab completions
+    private static String lastTabPrefix = "";
+    private static int tabCount = 0;
 
     private static String[] parseCommand(String input) {
         List<String> args = new ArrayList<>();
@@ -107,9 +112,16 @@ public class Main {
                     continue;
                 }
 
-                // Gather candidates dynamically: Builtins + PATH executables
+                // Track sequential tabs on the exact same prefix string
+                if (input.equals(lastTabPrefix)) {
+                    tabCount++;
+                } else {
+                    lastTabPrefix = input;
+                    tabCount = 1;
+                }
+
+                // Collect completion targets
                 Set<String> candidates = new HashSet<>(BUILTINS);
-                
                 String pathEnv = System.getenv("PATH");
                 if (pathEnv != null) {
                     String[] paths = pathEnv.split(File.pathSeparator);
@@ -128,7 +140,7 @@ public class Main {
                     }
                 }
 
-                // Check for matches starting with the user's input
+                // Filter candidates matching the prefix
                 List<String> matches = new ArrayList<>();
                 for (String candidate : candidates) {
                     if (candidate.startsWith(input)) {
@@ -136,20 +148,57 @@ public class Main {
                     }
                 }
 
-                // If exactly one match is found, autocomplete it with a trailing space
+                // Sort matches alphabetically
+                Collections.sort(matches);
+
                 if (matches.size() == 1) {
+                    // Singular unique match found -> Autocomplete instantly
                     String completed = matches.get(0) + " ";
                     String addition = completed.substring(input.length());
                     System.out.print(addition);
                     System.out.flush();
                     currentLine.append(addition);
-                } else {
-                    // No matches or multiple matches -> ring the terminal bell
+                    
+                    // Reset tab state since an action succeeded
+                    tabCount = 0;
+                    lastTabPrefix = "";
+                } 
+                else if (matches.size() > 1) {
+                    // Multiple matches logic
+                    if (tabCount == 1) {
+                        // First tab press -> ring the bell
+                        System.out.print("\u0007");
+                        System.out.flush();
+                    } else if (tabCount >= 2) {
+                        // Second tab press -> Print options and re-render prompt
+                        System.out.println();
+                        for (int i = 0; i < matches.size(); i++) {
+                            System.out.print(matches.get(i));
+                            if (i < matches.size() - 1) {
+                                System.out.print("  "); // Two spaces separation
+                            }
+                        }
+                        System.out.println();
+                        System.out.print("$ " + input);
+                        System.out.flush();
+                        
+                        // Keep tabCount active or loop it if desired
+                        tabCount = 0;
+                    }
+                } 
+                else {
+                    // No matches -> Ring the bell
                     System.out.print("\u0007");
                     System.out.flush();
+                    tabCount = 0;
+                    lastTabPrefix = "";
                 }
                 continue;
             }
+
+            // Reset tab tracking variables if the user presses any normal key
+            tabCount = 0;
+            lastTabPrefix = "";
 
             // 2. Handle Newline
             if (c == '\n' || c == '\r') {
