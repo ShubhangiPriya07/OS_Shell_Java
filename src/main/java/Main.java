@@ -5,12 +5,17 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 public class Main {
     private static final List<String> BUILTINS = List.of("echo", "exit", "type", "complete");
+    
+    // Dynamic memory store to map commands to their registered completer script paths
+    private static final Map<String, String> registeredCompletions = new HashMap<>();
     
     private static String lastTabPrefix = "";
     private static int tabCount = 0;
@@ -473,13 +478,25 @@ public class Main {
             }
         }
 
-        // UPDATED: Added structural flag logic processing for complete -p <command>
+        // UPDATED: Added complete -C registration and normalized complete -p lookup logic
         else if (command.equals("complete")) {
             StringBuilder output = new StringBuilder();
             
             if (parts.length >= 3 && parts[1].equals("-p")) {
                 String targetCommand = parts[2];
-                output.append("complete: ").append(targetCommand).append(": no completion specification").append(System.lineSeparator());
+                if (registeredCompletions.containsKey(targetCommand)) {
+                    String scriptPath = registeredCompletions.get(targetCommand);
+                    // Output format: complete -C '/path/to/script' target
+                    output.append("complete -C '").append(scriptPath).append("' ").append(targetCommand).append(System.lineSeparator());
+                } else {
+                    output.append("complete: ").append(targetCommand).append(": no completion specification").append(System.lineSeparator());
+                }
+            } 
+            else if (parts.length >= 4 && parts[1].equals("-C")) {
+                String scriptPath = parts[2];
+                String targetCommand = parts[3];
+                registeredCompletions.put(targetCommand, scriptPath);
+                // complete -C registration executes with no stdout output produced
             }
 
             if (stdoutFile != null) {
