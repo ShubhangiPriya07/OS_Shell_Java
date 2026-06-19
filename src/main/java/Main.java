@@ -1,7 +1,9 @@
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -13,8 +15,6 @@ import java.util.Set;
 
 public class Main {
     private static final List<String> BUILTINS = List.of("echo", "exit", "type", "complete");
-    
-    // Dynamic memory store to map commands to their registered completer script paths
     private static final Map<String, String> registeredCompletions = new HashMap<>();
     
     private static String lastTabPrefix = "";
@@ -126,8 +126,45 @@ public class Main {
             if (c == '\t') {
                 String input = currentLine.toString();
                 
-                // --- CASE A: ARGUMENT COMPLETION ---
                 if (input.contains(" ")) {
+                    // Extract the primary command being run to check for script registrations
+                    int firstSpaceIndex = input.indexOf(' ');
+                    String primaryCommand = input.substring(0, firstSpaceIndex);
+
+                    // --- CASE A1: REGISTERED COMPLETER SCRIPT EXECUTION ---
+                    if (registeredCompletions.containsKey(primaryCommand)) {
+                        String scriptPath = registeredCompletions.get(primaryCommand);
+                        
+                        try {
+                            ProcessBuilder pb = new ProcessBuilder(scriptPath);
+                            Process process = pb.start();
+                            
+                            // Read stdout from the script execution process
+                            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                                String candidate = reader.readLine();
+                                process.waitFor(); // Wait for completion safely
+                                
+                                if (candidate != null && !candidate.trim().isEmpty()) {
+                                    candidate = candidate.trim();
+                                    int lastSpaceIndex = input.lastIndexOf(' ');
+                                    String rawPrefix = input.substring(lastSpaceIndex + 1);
+                                    
+                                    // Complete the word with its trailing space
+                                    String completion = candidate + " ";
+                                    String addition = completion.substring(rawPrefix.length());
+                                    
+                                    System.out.print(addition);
+                                    System.out.flush();
+                                    currentLine.append(addition);
+                                    continue;
+                                }
+                            }
+                        } catch (Exception e) {
+                            // Fail gracefully if process execution fails
+                        }
+                    }
+
+                    // --- CASE A2: FALLBACK STANDARD ARGUMENT COMPLETION ---
                     int lastSpaceIndex = input.lastIndexOf(' ');
                     String rawPrefix = input.substring(lastSpaceIndex + 1);
 
@@ -478,7 +515,6 @@ public class Main {
             }
         }
 
-        // UPDATED: Added complete -C registration and normalized complete -p lookup logic
         else if (command.equals("complete")) {
             StringBuilder output = new StringBuilder();
             
@@ -486,7 +522,6 @@ public class Main {
                 String targetCommand = parts[2];
                 if (registeredCompletions.containsKey(targetCommand)) {
                     String scriptPath = registeredCompletions.get(targetCommand);
-                    // Output format: complete -C '/path/to/script' target
                     output.append("complete -C '").append(scriptPath).append("' ").append(targetCommand).append(System.lineSeparator());
                 } else {
                     output.append("complete: ").append(targetCommand).append(": no completion specification").append(System.lineSeparator());
@@ -496,7 +531,6 @@ public class Main {
                 String scriptPath = parts[2];
                 String targetCommand = parts[3];
                 registeredCompletions.put(targetCommand, scriptPath);
-                // complete -C registration executes with no stdout output produced
             }
 
             if (stdoutFile != null) {
