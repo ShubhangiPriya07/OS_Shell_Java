@@ -118,6 +118,47 @@ public class Main {
         return prefix;
     }
 
+    // Helper method to reap exited processes, display 'Done', and evict them from our job list.
+    private static String reapBackgroundJobs() {
+        StringBuilder output = new StringBuilder();
+        int totalJobs = backgroundJobs.size();
+
+        // 1. Identify and transition completed tasks to 'Done'
+        for (int i = 0; i < totalJobs; i++) {
+            Job job = backgroundJobs.get(i);
+            if (job.status.equals("Running") && !job.process.isAlive()) {
+                job.status = "Done";
+                if (job.command.endsWith(" &")) {
+                    job.command = job.command.substring(0, job.command.length() - 2);
+                }
+            }
+        }
+
+        // 2. Format out log output lines honoring dynamic markers (+, -, space)
+        for (int i = 0; i < totalJobs; i++) {
+            Job job = backgroundJobs.get(i);
+            if (job.status.equals("Done")) {
+                char marker = ' ';
+                if (i == totalJobs - 1) {
+                    marker = '+';
+                } else if (i == totalJobs - 2) {
+                    marker = '-';
+                }
+                output.append(String.format("[%d]%c  %-24s%s%n", job.id, marker, job.status, job.command));
+            }
+        }
+
+        // 3. Purge 'Done' entries from our registry state
+        Iterator<Job> iterator = backgroundJobs.iterator();
+        while (iterator.hasNext()) {
+            if (iterator.next().status.equals("Done")) {
+                iterator.remove();
+            }
+        }
+
+        return output.toString();
+    }
+
     public static void main(String[] args) throws Exception {
         configureTerminalMode("-icanon -echo");
 
@@ -130,6 +171,9 @@ public class Main {
 
     private static void runShellLoop() throws Exception {
         StringBuilder currentLine = new StringBuilder();
+        
+        // REAP CHECKPOINT 1: Automatic background job check right before rendering a fresh terminal prompt line context
+        System.out.print(reapBackgroundJobs());
         System.out.print("$ ");
         System.out.flush();
 
@@ -452,6 +496,9 @@ public class Main {
                 processCommandLine(commandLine);
 
                 currentLine.setLength(0);
+
+                // REAP CHECKPOINT 1 (Repeated): Ensure exited tasks write out information synchronously before bringing up the next line
+                System.out.print(reapBackgroundJobs());
                 System.out.print("$ ");
                 System.out.flush();
                 continue;
@@ -652,38 +699,22 @@ public class Main {
             }
         }
 
+        // REAP CHECKPOINT 2: Internal 'jobs' builtin logic leverages our centralized helper function block
         else if (command.equals("jobs")) {
-            for (Job job : backgroundJobs) {
-                if (job.status.equals("Running") && !job.process.isAlive()) {
-                    job.status = "Done";
-                    if (job.command.endsWith(" &")) {
-                        job.command = job.command.substring(0, job.command.length() - 2);
-                    }
-                }
-            }
-
-            StringBuilder output = new StringBuilder();
+            // First step: evaluate and print 'Done' jobs that exited since last prompt evaluation loop checkpoint
+            StringBuilder output = new StringBuilder(reapBackgroundJobs());
+            
+            // Second step: print remaining active 'Running' background jobs safely
             int totalJobs = backgroundJobs.size();
-
             for (int i = 0; i < totalJobs; i++) {
                 Job job = backgroundJobs.get(i);
                 char marker = ' ';
-
                 if (i == totalJobs - 1) {
-                    marker = '+'; 
+                    marker = '+';
                 } else if (i == totalJobs - 2) {
-                    marker = '-'; 
+                    marker = '-';
                 }
-
-                String line = String.format("[%d]%c  %-24s%s%n", job.id, marker, job.status, job.command);
-                output.append(line);
-            }
-
-            Iterator<Job> iterator = backgroundJobs.iterator();
-            while (iterator.hasNext()) {
-                if (iterator.next().status.equals("Done")) {
-                    iterator.remove();
-                }
+                output.append(String.format("[%d]%c  %-24s%s%n", job.id, marker, job.status, job.command));
             }
 
             if (stdoutFile != null) {
