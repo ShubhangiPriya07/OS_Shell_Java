@@ -121,7 +121,7 @@ public class Main {
             if (c == '\t') {
                 String input = currentLine.toString();
                 
-                // --- CASE A: FILENAME / PATH COMPLETION ---
+                // --- CASE A: FILENAME, PATH, & DIRECTORY COMPLETION ---
                 if (input.contains(" ")) {
                     int lastSpaceIndex = input.lastIndexOf(' ');
                     String rawPrefix = input.substring(lastSpaceIndex + 1);
@@ -129,29 +129,32 @@ public class Main {
                     String dirPath = ".";
                     String filePrefix = rawPrefix;
 
-                    // Handle nested subdirectory splitting if a slash is found
                     if (rawPrefix.contains("/")) {
                         int lastSlashIndex = rawPrefix.lastIndexOf('/');
-                        dirPath = rawPrefix.substring(0, lastSlashIndex + 1); // e.g., "path/to/"
-                        filePrefix = rawPrefix.substring(lastSlashIndex + 1); // e.g., "f"
+                        dirPath = rawPrefix.substring(0, lastSlashIndex + 1); 
+                        filePrefix = rawPrefix.substring(lastSlashIndex + 1); 
                     }
 
                     File searchDir = new File(dirPath);
                     File[] files = searchDir.listFiles();
-                    List<String> fileMatches = new ArrayList<>();
+                    List<File> fileMatches = new ArrayList<>();
 
                     if (files != null) {
                         for (File file : files) {
                             if (file.getName().startsWith(filePrefix)) {
-                                fileMatches.add(file.getName());
+                                fileMatches.add(file);
                             }
                         }
                     }
 
                     if (fileMatches.size() == 1) {
-                        // Reconstruct full replacement string relative to what was typed
-                        String matchedName = fileMatches.get(0);
-                        String completePath = (rawPrefix.contains("/")) ? dirPath + matchedName + " " : matchedName + " ";
+                        File match = fileMatches.get(0);
+                        String matchedName = match.getName();
+                        
+                        // Rule implementation: directories get "/", files get a trailing space
+                        String suffix = match.isDirectory() ? "/" : " ";
+                        
+                        String completePath = (rawPrefix.contains("/")) ? dirPath + matchedName + suffix : matchedName + suffix;
                         String addition = completePath.substring(rawPrefix.length());
                         
                         System.out.print(addition);
