@@ -147,13 +147,13 @@ public class Main {
                         }
                     }
 
-                    // Sort matches alphabetically by filename
+                    // Sort matches alphabetically by raw name
                     fileMatches.sort((f1, f2) -> f1.getName().compareTo(f2.getName()));
 
                     if (fileMatches.size() == 1) {
+                        // Exactly one match -> full completion with space/slash
                         File match = fileMatches.get(0);
                         String matchedName = match.getName();
-                        
                         String suffix = match.isDirectory() ? "/" : " ";
                         
                         String completePath = (rawPrefix.contains("/")) ? dirPath + matchedName + suffix : matchedName + suffix;
@@ -167,33 +167,55 @@ public class Main {
                         lastTabPrefix = "";
                     } 
                     else if (fileMatches.size() > 1) {
-                        // Track sequential tabs for arguments
-                        if (input.equals(lastTabPrefix)) {
-                            tabCount++;
-                        } else {
-                            lastTabPrefix = input;
-                            tabCount = 1;
+                        // Extract names for LCP calculation
+                        List<String> matchNames = new ArrayList<>();
+                        for (File f : fileMatches) {
+                            matchNames.add(f.getName());
                         }
 
-                        if (tabCount == 1) {
-                            System.out.print("\u0007");
+                        String lcp = findLongestCommonPrefix(matchNames);
+
+                        if (lcp.length() > filePrefix.length()) {
+                            // Progressive completion: append shared prefix chunk without any trailing character
+                            String completePath = (rawPrefix.contains("/")) ? dirPath + lcp : lcp;
+                            String addition = completePath.substring(rawPrefix.length());
+                            
+                            System.out.print(addition);
                             System.out.flush();
-                        } else if (tabCount >= 2) {
-                            System.out.println();
-                            for (int i = 0; i < fileMatches.size(); i++) {
-                                File m = fileMatches.get(i);
-                                System.out.print(m.getName() + (m.isDirectory() ? "/" : ""));
-                                if (i < fileMatches.size() - 1) {
-                                    System.out.print("  "); // Two spaces separation
-                                }
-                            }
-                            System.out.println();
-                            System.out.print("$ " + input);
-                            System.out.flush();
+                            currentLine.append(addition);
+                            
                             tabCount = 0;
+                            lastTabPrefix = "";
+                        } else {
+                            // LCP matches exactly what's typed -> execute alternative behavior
+                            if (input.equals(lastTabPrefix)) {
+                                tabCount++;
+                            } else {
+                                lastTabPrefix = input;
+                                tabCount = 1;
+                            }
+
+                            if (tabCount == 1) {
+                                System.out.print("\u0007");
+                                System.out.flush();
+                            } else if (tabCount >= 2) {
+                                System.out.println();
+                                for (int i = 0; i < fileMatches.size(); i++) {
+                                    File m = fileMatches.get(i);
+                                    System.out.print(m.getName() + (m.isDirectory() ? "/" : ""));
+                                    if (i < fileMatches.size() - 1) {
+                                        System.out.print("  ");
+                                    }
+                                }
+                                System.out.println();
+                                System.out.print("$ " + input);
+                                System.out.flush();
+                                tabCount = 0;
+                            }
                         }
                     } 
                     else {
+                        // No local file matches -> ring bell
                         System.out.print("\u0007");
                         System.out.flush();
                         tabCount = 0;
