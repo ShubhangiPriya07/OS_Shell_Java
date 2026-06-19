@@ -35,10 +35,23 @@ public class Main {
     }
 
     private static final List<Job> backgroundJobs = new ArrayList<>();
-    private static int nextJobId = 1;
 
     private static String lastTabPrefix = "";
     private static int tabCount = 0;
+
+    // Dynamically compute the next job ID:
+    // - If table is empty, return 1
+    // - Otherwise, return max current ID + 1
+    private static int getNextJobId() {
+        if (backgroundJobs.isEmpty()) {
+            return 1;
+        }
+        int max = 0;
+        for (Job job : backgroundJobs) {
+            if (job.id > max) max = job.id;
+        }
+        return max + 1;
+    }
 
     private static String[] parseCommand(String input) {
         List<String> args = new ArrayList<>();
@@ -755,7 +768,13 @@ public class Main {
                     Process process = pb.start();
 
                     if (isBackgroundJob) {
-                        System.out.println("[" + nextJobId + "] " + process.pid());
+                        // Reap done jobs first so the table is clean before computing next ID
+                        backgroundJobs.removeIf(job -> job.status.equals("Done"));
+                        updateJobStatuses();
+                        backgroundJobs.removeIf(job -> job.status.equals("Done"));
+
+                        int newJobId = getNextJobId();
+                        System.out.println("[" + newJobId + "] " + process.pid());
                         
                         StringBuilder fullCmd = new StringBuilder();
                         for (int i = 0; i < parts.length; i++) {
@@ -764,8 +783,7 @@ public class Main {
                         }
                         fullCmd.append(" &");
 
-                        backgroundJobs.add(new Job(nextJobId, process.pid(), fullCmd.toString(), "Running", process));
-                        nextJobId++;
+                        backgroundJobs.add(new Job(newJobId, process.pid(), fullCmd.toString(), "Running", process));
                     } else {
                         process.waitFor();
                     }
