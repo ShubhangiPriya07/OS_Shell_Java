@@ -12,7 +12,6 @@ import java.util.Set;
 public class Main {
     private static final List<String> BUILTINS = List.of("echo", "exit", "type");
     
-    // Tracking variables for consecutive tab completions
     private static String lastTabPrefix = "";
     private static int tabCount = 0;
 
@@ -78,6 +77,23 @@ public class Main {
         return args.toArray(new String[0]);
     }
 
+    // Helper method to find the Longest Common Prefix among matching strings
+    private static String findLongestCommonPrefix(List<String> strs) {
+        if (strs == null || strs.isEmpty()) {
+            return "";
+        }
+        String prefix = strs.get(0);
+        for (int i = 1; i < strs.size(); i++) {
+            while (strs.get(i).indexOf(prefix) != 0) {
+                prefix = prefix.substring(0, prefix.length() - 1);
+                if (prefix.isEmpty()) {
+                    return "";
+                }
+            }
+        }
+        return prefix;
+    }
+
     public static void main(String[] args) throws Exception {
         configureTerminalMode("-icanon -echo");
 
@@ -112,15 +128,7 @@ public class Main {
                     continue;
                 }
 
-                // Track sequential tabs on the exact same prefix string
-                if (input.equals(lastTabPrefix)) {
-                    tabCount++;
-                } else {
-                    lastTabPrefix = input;
-                    tabCount = 1;
-                }
-
-                // Collect completion targets
+                // Gather candidates dynamically: Builtins + PATH executables
                 Set<String> candidates = new HashSet<>(BUILTINS);
                 String pathEnv = System.getenv("PATH");
                 if (pathEnv != null) {
@@ -140,7 +148,7 @@ public class Main {
                     }
                 }
 
-                // Filter candidates matching the prefix
+                // Check for matches starting with user input prefix
                 List<String> matches = new ArrayList<>();
                 for (String candidate : candidates) {
                     if (candidate.startsWith(input)) {
@@ -148,42 +156,58 @@ public class Main {
                     }
                 }
 
-                // Sort matches alphabetically
                 Collections.sort(matches);
 
                 if (matches.size() == 1) {
-                    // Singular unique match found -> Autocomplete instantly
+                    // Singular unique match -> Complete fully with trailing space
                     String completed = matches.get(0) + " ";
                     String addition = completed.substring(input.length());
                     System.out.print(addition);
                     System.out.flush();
                     currentLine.append(addition);
                     
-                    // Reset tab state since an action succeeded
                     tabCount = 0;
                     lastTabPrefix = "";
                 } 
                 else if (matches.size() > 1) {
-                    // Multiple matches logic
-                    if (tabCount == 1) {
-                        // First tab press -> ring the bell
-                        System.out.print("\u0007");
+                    // Calculate Longest Common Prefix (LCP)
+                    String lcp = findLongestCommonPrefix(matches);
+
+                    if (lcp.length() > input.length()) {
+                        // Progressive expansion: we found a common prefix chunk to auto-append
+                        String addition = lcp.substring(input.length());
+                        System.out.print(addition);
                         System.out.flush();
-                    } else if (tabCount >= 2) {
-                        // Second tab press -> Print options and re-render prompt
-                        System.out.println();
-                        for (int i = 0; i < matches.size(); i++) {
-                            System.out.print(matches.get(i));
-                            if (i < matches.size() - 1) {
-                                System.out.print("  "); // Two spaces separation
-                            }
-                        }
-                        System.out.println();
-                        System.out.print("$ " + input);
-                        System.out.flush();
+                        currentLine.append(addition);
                         
-                        // Keep tabCount active or loop it if desired
+                        // Reset consecutive counts because text changed
                         tabCount = 0;
+                        lastTabPrefix = "";
+                    } else {
+                        // The LCP is equal to what they already typed. Handle double tab fallback behavior:
+                        if (input.equals(lastTabPrefix)) {
+                            tabCount++;
+                        } else {
+                            lastTabPrefix = input;
+                            tabCount = 1;
+                        }
+
+                        if (tabCount == 1) {
+                            System.out.print("\u0007");
+                            System.out.flush();
+                        } else if (tabCount >= 2) {
+                            System.out.println();
+                            for (int i = 0; i < matches.size(); i++) {
+                                System.out.print(matches.get(i));
+                                if (i < matches.size() - 1) {
+                                    System.out.print("  ");
+                                }
+                            }
+                            System.out.println();
+                            System.out.print("$ " + input);
+                            System.out.flush();
+                            tabCount = 0;
+                        }
                     }
                 } 
                 else {
@@ -196,7 +220,7 @@ public class Main {
                 continue;
             }
 
-            // Reset tab tracking variables if the user presses any normal key
+            // Any non-tab character resets double-tab history tracker
             tabCount = 0;
             lastTabPrefix = "";
 
