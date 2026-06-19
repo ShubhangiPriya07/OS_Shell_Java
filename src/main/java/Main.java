@@ -185,7 +185,6 @@ public class Main {
                     int firstSpaceIndex = input.indexOf(' ');
                     String primaryCommand = input.substring(0, firstSpaceIndex);
 
-                    // --- CASE A1: REGISTERED COMPLETER SCRIPT EXECUTION ---
                     if (registeredCompletions.containsKey(primaryCommand)) {
                         String scriptPath = registeredCompletions.get(primaryCommand);
                         
@@ -243,7 +242,7 @@ public class Main {
                                 if (lcp.length() > argv2.length()) {
                                     String addition = lcp.substring(argv2.length());
                                     System.out.print(addition);
-                                    System.flush();
+                                    System.out.flush();
                                     currentLine.append(addition);
                                     
                                     tabCount = 0;
@@ -291,7 +290,6 @@ public class Main {
                         }
                     }
 
-                    // --- CASE A2: FALLBACK STANDARD ARGUMENT COMPLETION ---
                     int lastSpaceIndex = input.lastIndexOf(' ');
                     String rawPrefix = input.substring(lastSpaceIndex + 1);
 
@@ -387,7 +385,6 @@ public class Main {
                     continue;
                 }
 
-                // --- CASE B: COMMAND COMPLETION ---
                 if (input.isEmpty()) {
                     System.out.print("\u0007");
                     System.out.flush();
@@ -402,16 +399,16 @@ public class Main {
                 }
 
                 Set<String> candidates = new HashSet<>();
-                candidates.addAll(BUILTINS); // FIXED: Cleared 'BUINS' typo to use correct array tracking
+                candidates.addAll(BUILTINS);
                 String pathEnv = System.getenv("PATH");
                 if (pathEnv != null) {
                     String[] paths = pathEnv.split(File.pathSeparator);
                     for (String path : paths) {
                         File dir = new File(path);
                         if (dir.exists() && dir.isDirectory()) {
-                            File[] files = dir.listFiles();
-                            if (files != null) {
-                                for (File file : files) {
+                            File[] dirFiles = dir.listFiles();
+                            if (dirFiles != null) {
+                                for (File file : dirFiles) {
                                     if (file.isFile() && file.canExecute()) {
                                         candidates.add(file.getName());
                                     }
