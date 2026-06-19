@@ -134,15 +134,32 @@ public class Main {
                     if (registeredCompletions.containsKey(primaryCommand)) {
                         String scriptPath = registeredCompletions.get(primaryCommand);
                         
+                        // Parse out context parameters from what the user typed so far
+                        String[] words = input.split("\\s+");
+                        
+                        String argv1 = primaryCommand;
+                        String argv2 = "";
+                        String argv3 = "";
+
+                        if (input.endsWith(" ")) {
+                            // User hit tab after a trailing space (e.g. "git remote ")
+                            argv2 = "";
+                            argv3 = words.length > 0 ? words[words.length - 1] : "";
+                        } else {
+                            // User hit tab while completing a partial word (e.g. "git remote set")
+                            argv2 = words.length > 0 ? words[words.length - 1] : "";
+                            argv3 = words.length > 1 ? words[words.length - 2] : "";
+                        }
+
                         try {
-                            ProcessBuilder pb = new ProcessBuilder(scriptPath);
+                            // Pass context params exactly as required: script path, argv[1], argv[2], argv[3]
+                            ProcessBuilder pb = new ProcessBuilder(scriptPath, argv1, argv2, argv3);
                             Process process = pb.start();
                             
                             try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
                                 String candidate = reader.readLine();
                                 process.waitFor();
                                 
-                                // REFINED SAFETY CHECK: If candidate output is missing or blank, ring the bell
                                 if (candidate != null && !candidate.trim().isEmpty()) {
                                     candidate = candidate.trim();
                                     int lastSpaceIndex = input.lastIndexOf(' ');
@@ -156,14 +173,12 @@ public class Main {
                                     currentLine.append(addition);
                                     continue;
                                 } else {
-                                    // Empty output from script -> Ring bell, leave input untouched
                                     System.out.print("\u0007");
                                     System.out.flush();
                                     continue;
                                 }
                             }
                         } catch (Exception e) {
-                            // Fallback bell signal on unexpected process runtime failures
                             System.out.print("\u0007");
                             System.out.flush();
                             continue;
