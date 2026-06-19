@@ -149,7 +149,7 @@ public class Main {
 
                     // --- CASE A1: REGISTERED COMPLETER SCRIPT EXECUTION ---
                     if (registeredCompletions.containsKey(primaryCommand)) {
-                        String scriptPath = registeredCompletions.get(targetCommand);
+                        String scriptPath = registeredCompletions.get(primaryCommand); // FIXED: targetCommand -> primaryCommand
                         
                         String[] words = input.split("\\s+");
                         String argv1 = primaryCommand;
@@ -205,7 +205,7 @@ public class Main {
                                 if (lcp.length() > argv2.length()) {
                                     String addition = lcp.substring(argv2.length());
                                     System.out.print(addition);
-                                    System.flush();
+                                    System.out.flush();
                                     currentLine.append(addition);
                                     
                                     tabCount = 0;
@@ -323,7 +323,7 @@ public class Main {
 
                             if (tabCount == 1) {
                                 System.out.print("\u0007");
-                                System.out.flush();
+                                System.out.flush(); // FIXED: System.flush() -> System.out.flush()
                             } else if (tabCount >= 2) {
                                 System.out.println();
                                 for (int i = 0; i < fileMatches.size(); i++) {
@@ -649,7 +649,6 @@ public class Main {
             }
         }
 
-        // UPDATED: Dynamically compute job state indicators (+, -, ' ') based on index lists
         else if (command.equals("jobs")) {
             StringBuilder output = new StringBuilder();
             int totalJobs = backgroundJobs.size();
@@ -659,12 +658,11 @@ public class Main {
                 char marker = ' ';
 
                 if (i == totalJobs - 1) {
-                    marker = '+'; // Most recent job
+                    marker = '+'; 
                 } else if (i == totalJobs - 2) {
-                    marker = '-'; // Second most recent job
+                    marker = '-'; 
                 }
 
-                // The bracket format changes to support dynamic marker strings: [%d]%c  %-24s
                 String line = String.format("[%d]%c  %-24s%s%n", job.id, marker, job.status, job.command);
                 output.append(line);
             }
