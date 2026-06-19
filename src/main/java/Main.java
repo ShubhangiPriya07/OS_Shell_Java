@@ -121,40 +121,50 @@ public class Main {
             if (c == '\t') {
                 String input = currentLine.toString();
                 
-                // --- CASE A: FILENAME ARGUMENT COMPLETION ---
+                // --- CASE A: FILENAME / PATH COMPLETION ---
                 if (input.contains(" ")) {
                     int lastSpaceIndex = input.lastIndexOf(' ');
-                    String prefix = input.substring(lastSpaceIndex + 1);
+                    String rawPrefix = input.substring(lastSpaceIndex + 1);
 
-                    // Scan current working directory for matching files
-                    File currentDir = new File(".");
-                    File[] files = currentDir.listFiles();
+                    String dirPath = ".";
+                    String filePrefix = rawPrefix;
+
+                    // Handle nested subdirectory splitting if a slash is found
+                    if (rawPrefix.contains("/")) {
+                        int lastSlashIndex = rawPrefix.lastIndexOf('/');
+                        dirPath = rawPrefix.substring(0, lastSlashIndex + 1); // e.g., "path/to/"
+                        filePrefix = rawPrefix.substring(lastSlashIndex + 1); // e.g., "f"
+                    }
+
+                    File searchDir = new File(dirPath);
+                    File[] files = searchDir.listFiles();
                     List<String> fileMatches = new ArrayList<>();
 
                     if (files != null) {
                         for (File file : files) {
-                            if (file.getName().startsWith(prefix)) {
+                            if (file.getName().startsWith(filePrefix)) {
                                 fileMatches.add(file.getName());
                             }
                         }
                     }
 
-                    // For this stage, we only care about exactly 1 single match case
                     if (fileMatches.size() == 1) {
-                        String completedFile = fileMatches.get(0) + " ";
-                        String addition = completedFile.substring(prefix.length());
+                        // Reconstruct full replacement string relative to what was typed
+                        String matchedName = fileMatches.get(0);
+                        String completePath = (rawPrefix.contains("/")) ? dirPath + matchedName + " " : matchedName + " ";
+                        String addition = completePath.substring(rawPrefix.length());
+                        
                         System.out.print(addition);
                         System.out.flush();
                         currentLine.append(addition);
                     } else {
-                        // Ring bell if nothing matches or ambiguous
                         System.out.print("\u0007");
                         System.out.flush();
                     }
                     continue;
                 }
 
-                // --- CASE B: COMMAND COMPLETION (Existing Logic) ---
+                // --- CASE B: COMMAND COMPLETION ---
                 if (input.isEmpty()) {
                     System.out.print("\u0007");
                     System.out.flush();
