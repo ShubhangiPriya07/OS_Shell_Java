@@ -147,13 +147,6 @@ public class Main {
                             argv3 = words.length > 1 ? words[words.length - 2] : "";
                         }
 
-                        if (input.equals(lastTabPrefix)) {
-                            tabCount++;
-                        } else {
-                            lastTabPrefix = input;
-                            tabCount = 1;
-                        }
-
                         try {
                             ProcessBuilder pb = new ProcessBuilder(scriptPath, argv1, argv2, argv3);
                             Map<String, String> env = pb.environment();
@@ -163,7 +156,6 @@ public class Main {
                             Process process = pb.start();
                             List<String> scriptCandidates = new ArrayList<>();
                             
-                            // UPDATED: Read all lines from stdout into a list of candidates
                             try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
                                 String line;
                                 while ((line = reader.readLine()) != null) {
@@ -191,25 +183,44 @@ public class Main {
                                 continue;
                             } 
                             else if (scriptCandidates.size() > 1) {
-                                Collections.sort(scriptCandidates); // Sort alphabetically
+                                // UPDATED: Longest Common Prefix Complete implementation for multiple options
+                                String lcp = findLongestCommonPrefix(scriptCandidates);
 
-                                if (tabCount == 1) {
-                                    // First tab rings the bell
-                                    System.out.print("\u0007");
+                                if (lcp.length() > argv2.length()) {
+                                    // If LCP extends what's typed, append context additions safely (no trailing character space)
+                                    String addition = lcp.substring(argv2.length());
+                                    System.out.print(addition);
                                     System.out.flush();
-                                } else if (tabCount >= 2) {
-                                    // Second tab prints the matching candidate collection
-                                    System.out.println();
-                                    for (int i = 0; i < scriptCandidates.size(); i++) {
-                                        System.out.print(scriptCandidates.get(i));
-                                        if (i < scriptCandidates.size() - 1) {
-                                            System.out.print("  "); // Two spaces separation
-                                        }
-                                    }
-                                    System.out.println();
-                                    System.out.print("$ " + input);
-                                    System.out.flush();
+                                    currentLine.append(addition);
+                                    
                                     tabCount = 0;
+                                    lastTabPrefix = "";
+                                } else {
+                                    // LCP does not extend text -> Track duplicate sequential tab fallback processing
+                                    if (input.equals(lastTabPrefix)) {
+                                        tabCount++;
+                                    } else {
+                                        lastTabPrefix = input;
+                                        tabCount = 1;
+                                    }
+
+                                    if (tabCount == 1) {
+                                        System.out.print("\u0007");
+                                        System.out.flush();
+                                    } else if (tabCount >= 2) {
+                                        Collections.sort(scriptCandidates);
+                                        System.out.println();
+                                        for (int i = 0; i < scriptCandidates.size(); i++) {
+                                            System.out.print(scriptCandidates.get(i));
+                                            if (i < scriptCandidates.size() - 1) {
+                                                System.out.print("  ");
+                                            }
+                                        }
+                                        System.out.println();
+                                        System.out.print("$ " + input);
+                                        System.out.flush();
+                                        tabCount = 0;
+                                    }
                                 }
                                 continue;
                             } else {
@@ -413,7 +424,6 @@ public class Main {
                 continue;
             }
 
-            // Any non-tab keystroke resets history state tracking configurations
             tabCount = 0;
             lastTabPrefix = "";
 
