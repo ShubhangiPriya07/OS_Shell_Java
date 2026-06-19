@@ -17,7 +17,6 @@ public class Main {
     private static final List<String> BUILTINS = List.of("echo", "exit", "type", "complete", "jobs");
     private static final Map<String, String> registeredCompletions = new HashMap<>();
     
-    // ADDED: Simple Tracking class to model a job specification state
     private static class Job {
         int id;
         long pid;
@@ -32,7 +31,6 @@ public class Main {
         }
     }
 
-    // A registry keeping track of background active tasks
     private static final List<Job> backgroundJobs = new ArrayList<>();
     private static int nextJobId = 1;
 
@@ -151,7 +149,7 @@ public class Main {
 
                     // --- CASE A1: REGISTERED COMPLETER SCRIPT EXECUTION ---
                     if (registeredCompletions.containsKey(primaryCommand)) {
-                        String scriptPath = registeredCompletions.get(primaryCommand);
+                        String scriptPath = registeredCompletions.get(targetCommand);
                         
                         String[] words = input.split("\\s+");
                         String argv1 = primaryCommand;
@@ -207,7 +205,7 @@ public class Main {
                                 if (lcp.length() > argv2.length()) {
                                     String addition = lcp.substring(argv2.length());
                                     System.out.print(addition);
-                                    System.out.flush();
+                                    System.flush();
                                     currentLine.append(addition);
                                     
                                     tabCount = 0;
@@ -651,12 +649,23 @@ public class Main {
             }
         }
 
-        // UPDATED: Standard jobs implementation that uses formatting specifiers to pad output
+        // UPDATED: Dynamically compute job state indicators (+, -, ' ') based on index lists
         else if (command.equals("jobs")) {
             StringBuilder output = new StringBuilder();
-            for (Job job : backgroundJobs) {
-                // Formatting format: [1]+  Running                 sleep 10 &
-                String line = String.format("[%d]+  %-24s%s%n", job.id, job.status, job.command);
+            int totalJobs = backgroundJobs.size();
+
+            for (int i = 0; i < totalJobs; i++) {
+                Job job = backgroundJobs.get(i);
+                char marker = ' ';
+
+                if (i == totalJobs - 1) {
+                    marker = '+'; // Most recent job
+                } else if (i == totalJobs - 2) {
+                    marker = '-'; // Second most recent job
+                }
+
+                // The bracket format changes to support dynamic marker strings: [%d]%c  %-24s
+                String line = String.format("[%d]%c  %-24s%s%n", job.id, marker, job.status, job.command);
                 output.append(line);
             }
 
@@ -712,7 +721,6 @@ public class Main {
                     if (isBackgroundJob) {
                         System.out.println("[" + nextJobId + "] " + process.pid());
                         
-                        // Capture the fully reconstructed background command representation
                         StringBuilder fullCmd = new StringBuilder();
                         for (int i = 0; i < parts.length; i++) {
                             if (i > 0) fullCmd.append(" ");
@@ -720,7 +728,6 @@ public class Main {
                         }
                         fullCmd.append(" &");
 
-                        // ADDED: Register job parameters to state list
                         backgroundJobs.add(new Job(nextJobId, process.pid(), fullCmd.toString(), "Running"));
                         nextJobId++;
                     } else {
