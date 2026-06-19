@@ -202,7 +202,6 @@ public class Main {
                         }
                     }
 
-                    // --- ADDED: 'type' Builtin Command Handling ---
                     else if (command.equals("type")) {
                         if (parts.length > 1) {
                             String target = parts[1];
