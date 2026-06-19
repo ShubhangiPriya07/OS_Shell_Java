@@ -151,7 +151,6 @@ public class Main {
                         File match = fileMatches.get(0);
                         String matchedName = match.getName();
                         
-                        // Rule implementation: directories get "/", files get a trailing space
                         String suffix = match.isDirectory() ? "/" : " ";
                         
                         String completePath = (rawPrefix.contains("/")) ? dirPath + matchedName + suffix : matchedName + suffix;
@@ -161,6 +160,7 @@ public class Main {
                         System.out.flush();
                         currentLine.append(addition);
                     } else {
+                        // CRITICAL REFINEMENT: Explicitly rings the bell when no argument entries match 
                         System.out.print("\u0007");
                         System.out.flush();
                     }
