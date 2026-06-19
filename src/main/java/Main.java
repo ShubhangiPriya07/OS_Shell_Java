@@ -135,7 +135,6 @@ public class Main {
                         String scriptPath = registeredCompletions.get(primaryCommand);
                         
                         String[] words = input.split("\\s+");
-                        
                         String argv1 = primaryCommand;
                         String argv2 = "";
                         String argv3 = "";
@@ -148,41 +147,83 @@ public class Main {
                             argv3 = words.length > 1 ? words[words.length - 2] : "";
                         }
 
+                        if (input.equals(lastTabPrefix)) {
+                            tabCount++;
+                        } else {
+                            lastTabPrefix = input;
+                            tabCount = 1;
+                        }
+
                         try {
                             ProcessBuilder pb = new ProcessBuilder(scriptPath, argv1, argv2, argv3);
-                            
-                            // UPDATED: Injected COMP_LINE and COMP_POINT environment variables onto the child builder context
                             Map<String, String> env = pb.environment();
                             env.put("COMP_LINE", input);
                             env.put("COMP_POINT", String.valueOf(input.getBytes().length));
                             
                             Process process = pb.start();
+                            List<String> scriptCandidates = new ArrayList<>();
                             
+                            // UPDATED: Read all lines from stdout into a list of candidates
                             try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                                String candidate = reader.readLine();
+                                String line;
+                                while ((line = reader.readLine()) != null) {
+                                    if (!line.trim().isEmpty()) {
+                                        scriptCandidates.add(line.trim());
+                                    }
+                                }
                                 process.waitFor();
+                            }
+
+                            if (scriptCandidates.size() == 1) {
+                                String candidate = scriptCandidates.get(0);
+                                int lastSpaceIndex = input.lastIndexOf(' ');
+                                String rawPrefix = input.substring(lastSpaceIndex + 1);
                                 
-                                if (candidate != null && !candidate.trim().isEmpty()) {
-                                    candidate = candidate.trim();
-                                    int lastSpaceIndex = input.lastIndexOf(' ');
-                                    String rawPrefix = input.substring(lastSpaceIndex + 1);
-                                    
-                                    String completion = candidate + " ";
-                                    String addition = completion.substring(rawPrefix.length());
-                                    
-                                    System.out.print(addition);
-                                    System.out.flush();
-                                    currentLine.append(addition);
-                                    continue;
-                                } else {
+                                String completion = candidate + " ";
+                                String addition = completion.substring(rawPrefix.length());
+                                
+                                System.out.print(addition);
+                                System.out.flush();
+                                currentLine.append(addition);
+                                
+                                tabCount = 0;
+                                lastTabPrefix = "";
+                                continue;
+                            } 
+                            else if (scriptCandidates.size() > 1) {
+                                Collections.sort(scriptCandidates); // Sort alphabetically
+
+                                if (tabCount == 1) {
+                                    // First tab rings the bell
                                     System.out.print("\u0007");
                                     System.out.flush();
-                                    continue;
+                                } else if (tabCount >= 2) {
+                                    // Second tab prints the matching candidate collection
+                                    System.out.println();
+                                    for (int i = 0; i < scriptCandidates.size(); i++) {
+                                        System.out.print(scriptCandidates.get(i));
+                                        if (i < scriptCandidates.size() - 1) {
+                                            System.out.print("  "); // Two spaces separation
+                                        }
+                                    }
+                                    System.out.println();
+                                    System.out.print("$ " + input);
+                                    System.out.flush();
+                                    tabCount = 0;
                                 }
+                                continue;
+                            } else {
+                                System.out.print("\u0007");
+                                System.out.flush();
+                                tabCount = 0;
+                                lastTabPrefix = "";
+                                continue;
                             }
                         } catch (Exception e) {
                             System.out.print("\u0007");
                             System.out.flush();
+                            tabCount = 0;
+                            lastTabPrefix = "";
                             continue;
                         }
                     }
@@ -372,6 +413,7 @@ public class Main {
                 continue;
             }
 
+            // Any non-tab keystroke resets history state tracking configurations
             tabCount = 0;
             lastTabPrefix = "";
 
