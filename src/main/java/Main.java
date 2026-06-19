@@ -183,11 +183,9 @@ public class Main {
                                 continue;
                             } 
                             else if (scriptCandidates.size() > 1) {
-                                // UPDATED: Longest Common Prefix Complete implementation for multiple options
                                 String lcp = findLongestCommonPrefix(scriptCandidates);
 
                                 if (lcp.length() > argv2.length()) {
-                                    // If LCP extends what's typed, append context additions safely (no trailing character space)
                                     String addition = lcp.substring(argv2.length());
                                     System.out.print(addition);
                                     System.out.flush();
@@ -196,7 +194,6 @@ public class Main {
                                     tabCount = 0;
                                     lastTabPrefix = "";
                                 } else {
-                                    // LCP does not extend text -> Track duplicate sequential tab fallback processing
                                     if (input.equals(lastTabPrefix)) {
                                         tabCount++;
                                     } else {
@@ -590,6 +587,7 @@ public class Main {
             }
         }
 
+        // UPDATED: Handled the complete -r unregistration configuration block logic cleanly
         else if (command.equals("complete")) {
             StringBuilder output = new StringBuilder();
             
@@ -606,6 +604,10 @@ public class Main {
                 String scriptPath = parts[2];
                 String targetCommand = parts[3];
                 registeredCompletions.put(targetCommand, scriptPath);
+            }
+            else if (parts.length >= 3 && parts[1].equals("-r")) {
+                String targetCommand = parts[2];
+                registeredCompletions.remove(targetCommand); // Remove completion specification mappings
             }
 
             if (stdoutFile != null) {
