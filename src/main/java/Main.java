@@ -4,7 +4,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public class Main {
     private static final List<String> BUILTINS = List.of("echo", "exit", "type");
@@ -99,17 +101,38 @@ public class Main {
             if (c == '\t') {
                 String input = currentLine.toString();
                 
-                // If they are inside an argument, ring the bell and do nothing
                 if (input.contains(" ") || input.isEmpty()) {
-                    System.out.print("\u0007"); // Print bell character (\x07)
+                    System.out.print("\u0007");
                     System.out.flush();
                     continue;
                 }
 
+                // Gather candidates dynamically: Builtins + PATH executables
+                Set<String> candidates = new HashSet<>(BUILTINS);
+                
+                String pathEnv = System.getenv("PATH");
+                if (pathEnv != null) {
+                    String[] paths = pathEnv.split(File.pathSeparator);
+                    for (String path : paths) {
+                        File dir = new File(path);
+                        if (dir.exists() && dir.isDirectory()) {
+                            File[] files = dir.listFiles();
+                            if (files != null) {
+                                for (File file : files) {
+                                    if (file.isFile() && file.canExecute()) {
+                                        candidates.add(file.getName());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Check for matches starting with the user's input
                 List<String> matches = new ArrayList<>();
-                for (String builtin : BUILTINS) {
-                    if (builtin.startsWith(input)) {
-                        matches.add(builtin);
+                for (String candidate : candidates) {
+                    if (candidate.startsWith(input)) {
+                        matches.add(candidate);
                     }
                 }
 
@@ -121,8 +144,8 @@ public class Main {
                     System.out.flush();
                     currentLine.append(addition);
                 } else {
-                    // Critical Requirement: If no matches or multiple matches exist, ring the bell!
-                    System.out.print("\u0007"); // Print bell character (\x07)
+                    // No matches or multiple matches -> ring the terminal bell
+                    System.out.print("\u0007");
                     System.out.flush();
                 }
                 continue;
