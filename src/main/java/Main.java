@@ -127,7 +127,6 @@ public class Main {
                 String input = currentLine.toString();
                 
                 if (input.contains(" ")) {
-                    // Extract the primary command being run to check for script registrations
                     int firstSpaceIndex = input.indexOf(' ');
                     String primaryCommand = input.substring(0, firstSpaceIndex);
 
@@ -139,17 +138,16 @@ public class Main {
                             ProcessBuilder pb = new ProcessBuilder(scriptPath);
                             Process process = pb.start();
                             
-                            // Read stdout from the script execution process
                             try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
                                 String candidate = reader.readLine();
-                                process.waitFor(); // Wait for completion safely
+                                process.waitFor();
                                 
+                                // REFINED SAFETY CHECK: If candidate output is missing or blank, ring the bell
                                 if (candidate != null && !candidate.trim().isEmpty()) {
                                     candidate = candidate.trim();
                                     int lastSpaceIndex = input.lastIndexOf(' ');
                                     String rawPrefix = input.substring(lastSpaceIndex + 1);
                                     
-                                    // Complete the word with its trailing space
                                     String completion = candidate + " ";
                                     String addition = completion.substring(rawPrefix.length());
                                     
@@ -157,10 +155,18 @@ public class Main {
                                     System.out.flush();
                                     currentLine.append(addition);
                                     continue;
+                                } else {
+                                    // Empty output from script -> Ring bell, leave input untouched
+                                    System.out.print("\u0007");
+                                    System.out.flush();
+                                    continue;
                                 }
                             }
                         } catch (Exception e) {
-                            // Fail gracefully if process execution fails
+                            // Fallback bell signal on unexpected process runtime failures
+                            System.out.print("\u0007");
+                            System.out.flush();
+                            continue;
                         }
                     }
 
