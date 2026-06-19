@@ -14,7 +14,8 @@ import java.util.Map;
 import java.util.Set;
 
 public class Main {
-    private static final List<String> BUILTINS = List.of("echo", "exit", "type", "complete");
+    // REGISTERED: Added "jobs" to the shell's builtin array
+    private static final List<String> BUILTINS = List.of("echo", "exit", "type", "complete", "jobs");
     private static final Map<String, String> registeredCompletions = new HashMap<>();
     
     private static String lastTabPrefix = "";
@@ -587,7 +588,6 @@ public class Main {
             }
         }
 
-        // UPDATED: Handled the complete -r unregistration configuration block logic cleanly
         else if (command.equals("complete")) {
             StringBuilder output = new StringBuilder();
             
@@ -607,7 +607,7 @@ public class Main {
             }
             else if (parts.length >= 3 && parts[1].equals("-r")) {
                 String targetCommand = parts[2];
-                registeredCompletions.remove(targetCommand); // Remove completion specification mappings
+                registeredCompletions.remove(targetCommand);
             }
 
             if (stdoutFile != null) {
@@ -618,6 +618,13 @@ public class Main {
                 System.out.print(output);
             }
 
+            if (stderrFile != null) {
+                new FileWriter(stderrFile, stderrAppend).close();
+            }
+        }
+
+        // ADDED: Jobs execution block (safely intercepts output redirects for future scaling)
+        else if (command.equals("jobs")) {
             if (stderrFile != null) {
                 new FileWriter(stderrFile, stderrAppend).close();
             }
