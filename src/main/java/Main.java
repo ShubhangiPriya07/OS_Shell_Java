@@ -10,7 +10,8 @@ import java.util.List;
 import java.util.Set;
 
 public class Main {
-    private static final List<String> BUILTINS = List.of("echo", "exit", "type");
+    // REGISTERED: Added "complete" to the shell's builtin array
+    private static final List<String> BUILTINS = List.of("echo", "exit", "type", "complete");
     
     private static String lastTabPrefix = "";
     private static int tabCount = 0;
@@ -121,7 +122,7 @@ public class Main {
             if (c == '\t') {
                 String input = currentLine.toString();
                 
-                // --- CASE A: ARGUMENT COMPLETION (Handles ANY position natively via lastIndexOf) ---
+                // --- CASE A: ARGUMENT COMPLETION ---
                 if (input.contains(" ")) {
                     int lastSpaceIndex = input.lastIndexOf(' ');
                     String rawPrefix = input.substring(lastSpaceIndex + 1);
@@ -468,6 +469,13 @@ public class Main {
                 System.out.print(output);
             }
 
+            if (stderrFile != null) {
+                new FileWriter(stderrFile, stderrAppend).close();
+            }
+        }
+
+        // ADDED: Handles 'complete' execution matching (simply processes redirect logic safely for future updates)
+        else if (command.equals("complete")) {
             if (stderrFile != null) {
                 new FileWriter(stderrFile, stderrAppend).close();
             }
