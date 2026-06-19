@@ -17,6 +17,25 @@ public class Main {
     private static final List<String> BUILTINS = List.of("echo", "exit", "type", "complete", "jobs");
     private static final Map<String, String> registeredCompletions = new HashMap<>();
     
+    // ADDED: Simple Tracking class to model a job specification state
+    private static class Job {
+        int id;
+        long pid;
+        String command;
+        String status;
+
+        public Job(int id, long pid, String command, String status) {
+            this.id = id;
+            this.pid = pid;
+            this.command = command;
+            this.status = status;
+        }
+    }
+
+    // A registry keeping track of background active tasks
+    private static final List<Job> backgroundJobs = new ArrayList<>();
+    private static int nextJobId = 1;
+
     private static String lastTabPrefix = "";
     private static int tabCount = 0;
 
@@ -514,11 +533,9 @@ public class Main {
             return;
         }
 
-        // --- UPDATED: Background Execution "&" Token Interception Logic ---
         boolean isBackgroundJob = false;
         if (parts[parts.length - 1].equals("&")) {
             isBackgroundJob = true;
-            // Slice out the trailing '&' character from final command processing elements
             parts = Arrays.copyOf(parts, parts.length - 1);
         }
 
@@ -634,7 +651,23 @@ public class Main {
             }
         }
 
+        // UPDATED: Standard jobs implementation that uses formatting specifiers to pad output
         else if (command.equals("jobs")) {
+            StringBuilder output = new StringBuilder();
+            for (Job job : backgroundJobs) {
+                // Formatting format: [1]+  Running                 sleep 10 &
+                String line = String.format("[%d]+  %-24s%s%n", job.id, job.status, job.command);
+                output.append(line);
+            }
+
+            if (stdoutFile != null) {
+                try (FileWriter writer = new FileWriter(stdoutFile, stdoutAppend)) {
+                    writer.write(output.toString());
+                }
+            } else {
+                System.out.print(output);
+            }
+
             if (stderrFile != null) {
                 new FileWriter(stderrFile, stderrAppend).close();
             }
@@ -651,6 +684,7 @@ public class Main {
 
                 if (file.exists() && file.canExecute()) {
                     ProcessBuilder pb = new ProcessBuilder(Arrays.asList(parts));
+                    
                     pb.redirectInput(ProcessBuilder.Redirect.INHERIT);
 
                     if (stdoutFile != null) {
@@ -675,12 +709,21 @@ public class Main {
 
                     Process process = pb.start();
 
-                    // UPDATED: Async Background routing control mechanism
                     if (isBackgroundJob) {
-                        // Print the required [JOB_NUMBER] PID output block asynchronously
-                        System.out.println("[1] " + process.pid());
+                        System.out.println("[" + nextJobId + "] " + process.pid());
+                        
+                        // Capture the fully reconstructed background command representation
+                        StringBuilder fullCmd = new StringBuilder();
+                        for (int i = 0; i < parts.length; i++) {
+                            if (i > 0) fullCmd.append(" ");
+                            fullCmd.append(parts[i]);
+                        }
+                        fullCmd.append(" &");
+
+                        // ADDED: Register job parameters to state list
+                        backgroundJobs.add(new Job(nextJobId, process.pid(), fullCmd.toString(), "Running"));
+                        nextJobId++;
                     } else {
-                        // Foreground tasks wait for exit codes explicitly
                         process.waitFor();
                     }
 
