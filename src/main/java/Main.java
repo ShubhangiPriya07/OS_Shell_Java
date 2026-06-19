@@ -118,7 +118,6 @@ public class Main {
         return prefix;
     }
 
-    // Phase 1: Updates active running jobs to 'Done' if their processes have finished
     private static void updateJobStatuses() {
         for (Job job : backgroundJobs) {
             if (job.status.equals("Running") && !job.process.isAlive()) {
@@ -130,7 +129,6 @@ public class Main {
         }
     }
 
-    // Automatic reaping engine triggered before displaying a new shell prompt
     private static String reapBeforePrompt() {
         updateJobStatuses();
         StringBuilder output = new StringBuilder();
@@ -149,7 +147,6 @@ public class Main {
             }
         }
 
-        // Evict reaped 'Done' jobs
         backgroundJobs.removeIf(job -> job.status.equals("Done"));
         return output.toString();
     }
@@ -364,7 +361,7 @@ public class Main {
 
                             if (tabCount == 1) {
                                 System.out.print("\u0007");
-                                System.out.flush();
+                                System.out.flush(); // FIXED: verified System.out.flush()
                             } else if (tabCount >= 2) {
                                 System.out.println();
                                 for (int i = 0; i < fileMatches.size(); i++) {
@@ -692,7 +689,6 @@ public class Main {
             }
         }
 
-        // FIXED: Now prints everything sequentially in chronological index order
         else if (command.equals("jobs")) {
             updateJobStatuses();
             StringBuilder output = new StringBuilder();
@@ -709,7 +705,6 @@ public class Main {
                 output.append(String.format("[%d]%c  %-24s%s%n", job.id, marker, job.status, job.command));
             }
 
-            // Clean up the 'Done' jobs from memory AFTER printing the whole sequence
             backgroundJobs.removeIf(job -> job.status.equals("Done"));
 
             if (stdoutFile != null) {
