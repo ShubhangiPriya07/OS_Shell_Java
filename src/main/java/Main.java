@@ -77,7 +77,6 @@ public class Main {
         return args.toArray(new String[0]);
     }
 
-    // Helper method to find the Longest Common Prefix among matching strings
     private static String findLongestCommonPrefix(List<String> strs) {
         if (strs == null || strs.isEmpty()) {
             return "";
@@ -122,13 +121,53 @@ public class Main {
             if (c == '\t') {
                 String input = currentLine.toString();
                 
-                if (input.contains(" ") || input.isEmpty()) {
+                // --- CASE A: FILENAME ARGUMENT COMPLETION ---
+                if (input.contains(" ")) {
+                    int lastSpaceIndex = input.lastIndexOf(' ');
+                    String prefix = input.substring(lastSpaceIndex + 1);
+
+                    // Scan current working directory for matching files
+                    File currentDir = new File(".");
+                    File[] files = currentDir.listFiles();
+                    List<String> fileMatches = new ArrayList<>();
+
+                    if (files != null) {
+                        for (File file : files) {
+                            if (file.getName().startsWith(prefix)) {
+                                fileMatches.add(file.getName());
+                            }
+                        }
+                    }
+
+                    // For this stage, we only care about exactly 1 single match case
+                    if (fileMatches.size() == 1) {
+                        String completedFile = fileMatches.get(0) + " ";
+                        String addition = completedFile.substring(prefix.length());
+                        System.out.print(addition);
+                        System.out.flush();
+                        currentLine.append(addition);
+                    } else {
+                        // Ring bell if nothing matches or ambiguous
+                        System.out.print("\u0007");
+                        System.out.flush();
+                    }
+                    continue;
+                }
+
+                // --- CASE B: COMMAND COMPLETION (Existing Logic) ---
+                if (input.isEmpty()) {
                     System.out.print("\u0007");
                     System.out.flush();
                     continue;
                 }
 
-                // Gather candidates dynamically: Builtins + PATH executables
+                if (input.equals(lastTabPrefix)) {
+                    tabCount++;
+                } else {
+                    lastTabPrefix = input;
+                    tabCount = 1;
+                }
+
                 Set<String> candidates = new HashSet<>(BUILTINS);
                 String pathEnv = System.getenv("PATH");
                 if (pathEnv != null) {
@@ -148,7 +187,6 @@ public class Main {
                     }
                 }
 
-                // Check for matches starting with user input prefix
                 List<String> matches = new ArrayList<>();
                 for (String candidate : candidates) {
                     if (candidate.startsWith(input)) {
@@ -159,39 +197,25 @@ public class Main {
                 Collections.sort(matches);
 
                 if (matches.size() == 1) {
-                    // Singular unique match -> Complete fully with trailing space
                     String completed = matches.get(0) + " ";
                     String addition = completed.substring(input.length());
                     System.out.print(addition);
                     System.out.flush();
                     currentLine.append(addition);
-                    
                     tabCount = 0;
                     lastTabPrefix = "";
                 } 
                 else if (matches.size() > 1) {
-                    // Calculate Longest Common Prefix (LCP)
                     String lcp = findLongestCommonPrefix(matches);
 
                     if (lcp.length() > input.length()) {
-                        // Progressive expansion: we found a common prefix chunk to auto-append
                         String addition = lcp.substring(input.length());
                         System.out.print(addition);
                         System.out.flush();
                         currentLine.append(addition);
-                        
-                        // Reset consecutive counts because text changed
                         tabCount = 0;
                         lastTabPrefix = "";
                     } else {
-                        // The LCP is equal to what they already typed. Handle double tab fallback behavior:
-                        if (input.equals(lastTabPrefix)) {
-                            tabCount++;
-                        } else {
-                            lastTabPrefix = input;
-                            tabCount = 1;
-                        }
-
                         if (tabCount == 1) {
                             System.out.print("\u0007");
                             System.out.flush();
@@ -211,7 +235,6 @@ public class Main {
                     }
                 } 
                 else {
-                    // No matches -> Ring the bell
                     System.out.print("\u0007");
                     System.out.flush();
                     tabCount = 0;
@@ -220,7 +243,6 @@ public class Main {
                 continue;
             }
 
-            // Any non-tab character resets double-tab history tracker
             tabCount = 0;
             lastTabPrefix = "";
 
