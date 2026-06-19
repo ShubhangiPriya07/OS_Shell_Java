@@ -10,7 +10,6 @@ import java.util.List;
 import java.util.Set;
 
 public class Main {
-    // REGISTERED: Added "complete" to the shell's builtin array
     private static final List<String> BUILTINS = List.of("echo", "exit", "type", "complete");
     
     private static String lastTabPrefix = "";
@@ -474,8 +473,23 @@ public class Main {
             }
         }
 
-        // ADDED: Handles 'complete' execution matching (simply processes redirect logic safely for future updates)
+        // UPDATED: Added structural flag logic processing for complete -p <command>
         else if (command.equals("complete")) {
+            StringBuilder output = new StringBuilder();
+            
+            if (parts.length >= 3 && parts[1].equals("-p")) {
+                String targetCommand = parts[2];
+                output.append("complete: ").append(targetCommand).append(": no completion specification").append(System.lineSeparator());
+            }
+
+            if (stdoutFile != null) {
+                try (FileWriter writer = new FileWriter(stdoutFile, stdoutAppend)) {
+                    writer.write(output.toString());
+                }
+            } else {
+                System.out.print(output);
+            }
+
             if (stderrFile != null) {
                 new FileWriter(stderrFile, stderrAppend).close();
             }
