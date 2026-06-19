@@ -147,6 +147,9 @@ public class Main {
                         }
                     }
 
+                    // Sort matches alphabetically by filename
+                    fileMatches.sort((f1, f2) -> f1.getName().compareTo(f2.getName()));
+
                     if (fileMatches.size() == 1) {
                         File match = fileMatches.get(0);
                         String matchedName = match.getName();
@@ -159,10 +162,42 @@ public class Main {
                         System.out.print(addition);
                         System.out.flush();
                         currentLine.append(addition);
-                    } else {
-                        // CRITICAL REFINEMENT: Explicitly rings the bell when no argument entries match 
+                        
+                        tabCount = 0;
+                        lastTabPrefix = "";
+                    } 
+                    else if (fileMatches.size() > 1) {
+                        // Track sequential tabs for arguments
+                        if (input.equals(lastTabPrefix)) {
+                            tabCount++;
+                        } else {
+                            lastTabPrefix = input;
+                            tabCount = 1;
+                        }
+
+                        if (tabCount == 1) {
+                            System.out.print("\u0007");
+                            System.out.flush();
+                        } else if (tabCount >= 2) {
+                            System.out.println();
+                            for (int i = 0; i < fileMatches.size(); i++) {
+                                File m = fileMatches.get(i);
+                                System.out.print(m.getName() + (m.isDirectory() ? "/" : ""));
+                                if (i < fileMatches.size() - 1) {
+                                    System.out.print("  "); // Two spaces separation
+                                }
+                            }
+                            System.out.println();
+                            System.out.print("$ " + input);
+                            System.out.flush();
+                            tabCount = 0;
+                        }
+                    } 
+                    else {
                         System.out.print("\u0007");
                         System.out.flush();
+                        tabCount = 0;
+                        lastTabPrefix = "";
                     }
                     continue;
                 }
