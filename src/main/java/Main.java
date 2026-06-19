@@ -243,7 +243,7 @@ public class Main {
                                 if (lcp.length() > argv2.length()) {
                                     String addition = lcp.substring(argv2.length());
                                     System.out.print(addition);
-                                    System.flush();
+                                    System.out.flush();
                                     currentLine.append(addition);
                                     
                                     tabCount = 0;
@@ -361,7 +361,7 @@ public class Main {
 
                             if (tabCount == 1) {
                                 System.out.print("\u0007");
-                                System.out.flush(); // FIXED: verified System.out.flush()
+                                System.out.flush();
                             } else if (tabCount >= 2) {
                                 System.out.println();
                                 for (int i = 0; i < fileMatches.size(); i++) {
@@ -401,7 +401,8 @@ public class Main {
                     tabCount = 1;
                 }
 
-                Set<String> candidates = new HashSet<>(BUILTINS);
+                Set<String> candidates = new HashSet<>(BUINS);
+                candidates.addAll(BUILTINS);
                 String pathEnv = System.getenv("PATH");
                 if (pathEnv != null) {
                     String[] paths = pathEnv.split(File.pathSeparator);
@@ -462,7 +463,7 @@ public class Main {
                             }
                             System.out.println();
                             System.out.print("$ " + input);
-                            System.out.flush();
+                            System.out.flush(); // FIXED: System.flush() -> System.out.flush()
                             tabCount = 0;
                         }
                     }
