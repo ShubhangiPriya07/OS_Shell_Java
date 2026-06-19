@@ -9,7 +9,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -17,7 +16,7 @@ import java.util.Set;
 public class Main {
     private static final List<String> BUILTINS = List.of("echo", "exit", "type", "complete", "jobs");
     private static final Map<String, String> registeredCompletions = new HashMap<>();
-    
+
     private static class Job {
         int id;
         long pid;
@@ -39,9 +38,6 @@ public class Main {
     private static String lastTabPrefix = "";
     private static int tabCount = 0;
 
-    // Dynamically compute the next job ID:
-    // - If table is empty, return 1
-    // - Otherwise, return max current ID + 1
     private static int getNextJobId() {
         if (backgroundJobs.isEmpty()) {
             return 1;
@@ -66,7 +62,6 @@ public class Main {
             if (inDoubleQuotes && c == '\\') {
                 if (i + 1 < input.length()) {
                     char next = input.charAt(i + 1);
-
                     if (next == '"' || next == '\\') {
                         current.append(next);
                         i++;
@@ -76,34 +71,21 @@ public class Main {
                 } else {
                     current.append('\\');
                 }
-            }
-
-            else if (c == '\\' && !inSingleQuotes && !inDoubleQuotes) {
+            } else if (c == '\\' && !inSingleQuotes && !inDoubleQuotes) {
                 if (i + 1 < input.length()) {
                     current.append(input.charAt(i + 1));
                     i++;
                 }
-            }
-
-            else if (c == '\'' && !inDoubleQuotes) {
+            } else if (c == '\'' && !inDoubleQuotes) {
                 inSingleQuotes = !inSingleQuotes;
-            }
-
-            else if (c == '"' && !inSingleQuotes) {
+            } else if (c == '"' && !inSingleQuotes) {
                 inDoubleQuotes = !inDoubleQuotes;
-            }
-
-            else if (Character.isWhitespace(c)
-                    && !inSingleQuotes
-                    && !inDoubleQuotes) {
-
+            } else if (Character.isWhitespace(c) && !inSingleQuotes && !inDoubleQuotes) {
                 if (current.length() > 0) {
                     args.add(current.toString());
                     current.setLength(0);
                 }
-            }
-
-            else {
+            } else {
                 current.append(c);
             }
         }
@@ -115,17 +97,39 @@ public class Main {
         return args.toArray(new String[0]);
     }
 
-    private static String findLongestCommonPrefix(List<String> strs) {
-        if (strs == null || strs.isEmpty()) {
-            return "";
+    // Split a raw input line into pipeline segments on unquoted '|'
+    private static List<String> splitOnPipe(String input) {
+        List<String> segments = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        boolean inSingleQuotes = false;
+        boolean inDoubleQuotes = false;
+
+        for (int i = 0; i < input.length(); i++) {
+            char c = input.charAt(i);
+            if (c == '\'' && !inDoubleQuotes) {
+                inSingleQuotes = !inSingleQuotes;
+                current.append(c);
+            } else if (c == '"' && !inSingleQuotes) {
+                inDoubleQuotes = !inDoubleQuotes;
+                current.append(c);
+            } else if (c == '|' && !inSingleQuotes && !inDoubleQuotes) {
+                segments.add(current.toString().trim());
+                current.setLength(0);
+            } else {
+                current.append(c);
+            }
         }
+        segments.add(current.toString().trim());
+        return segments;
+    }
+
+    private static String findLongestCommonPrefix(List<String> strs) {
+        if (strs == null || strs.isEmpty()) return "";
         String prefix = strs.get(0);
         for (int i = 1; i < strs.size(); i++) {
             while (strs.get(i).indexOf(prefix) != 0) {
                 prefix = prefix.substring(0, prefix.length() - 1);
-                if (prefix.isEmpty()) {
-                    return "";
-                }
+                if (prefix.isEmpty()) return "";
             }
         }
         return prefix;
@@ -151,11 +155,8 @@ public class Main {
             Job job = backgroundJobs.get(i);
             if (job.status.equals("Done")) {
                 char marker = ' ';
-                if (i == totalJobs - 1) {
-                    marker = '+';
-                } else if (i == totalJobs - 2) {
-                    marker = '-';
-                }
+                if (i == totalJobs - 1) marker = '+';
+                else if (i == totalJobs - 2) marker = '-';
                 output.append(String.format("[%d]%c  %-24s%s%n", job.id, marker, job.status, job.command));
             }
         }
@@ -166,7 +167,6 @@ public class Main {
 
     public static void main(String[] args) throws Exception {
         configureTerminalMode("-icanon -echo");
-
         try {
             runShellLoop();
         } finally {
@@ -176,7 +176,7 @@ public class Main {
 
     private static void runShellLoop() throws Exception {
         StringBuilder currentLine = new StringBuilder();
-        
+
         System.out.print(reapBeforePrompt());
         System.out.print("$ ");
         System.out.flush();
@@ -185,22 +185,19 @@ public class Main {
 
         while (true) {
             int c = in.read();
-
-            if (c == -1) {
-                break;
-            }
+            if (c == -1) break;
 
             // 1. Handle Tab key
             if (c == '\t') {
                 String input = currentLine.toString();
-                
+
                 if (input.contains(" ")) {
                     int firstSpaceIndex = input.indexOf(' ');
                     String primaryCommand = input.substring(0, firstSpaceIndex);
 
                     if (registeredCompletions.containsKey(primaryCommand)) {
                         String scriptPath = registeredCompletions.get(primaryCommand);
-                        
+
                         String[] words = input.split("\\s+");
                         String argv1 = primaryCommand;
                         String argv2 = "";
@@ -219,16 +216,14 @@ public class Main {
                             Map<String, String> env = pb.environment();
                             env.put("COMP_LINE", input);
                             env.put("COMP_POINT", String.valueOf(input.getBytes().length));
-                            
+
                             Process process = pb.start();
                             List<String> scriptCandidates = new ArrayList<>();
-                            
+
                             try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
                                 String line;
                                 while ((line = reader.readLine()) != null) {
-                                    if (!line.trim().isEmpty()) {
-                                        scriptCandidates.add(line.trim());
-                                    }
+                                    if (!line.trim().isEmpty()) scriptCandidates.add(line.trim());
                                 }
                                 process.waitFor();
                             }
@@ -237,36 +232,26 @@ public class Main {
                                 String candidate = scriptCandidates.get(0);
                                 int lastSpaceIndex = input.lastIndexOf(' ');
                                 String rawPrefix = input.substring(lastSpaceIndex + 1);
-                                
                                 String completion = candidate + " ";
                                 String addition = completion.substring(rawPrefix.length());
-                                
                                 System.out.print(addition);
                                 System.out.flush();
                                 currentLine.append(addition);
-                                
                                 tabCount = 0;
                                 lastTabPrefix = "";
                                 continue;
-                            } 
-                            else if (scriptCandidates.size() > 1) {
+                            } else if (scriptCandidates.size() > 1) {
                                 String lcp = findLongestCommonPrefix(scriptCandidates);
-
                                 if (lcp.length() > argv2.length()) {
                                     String addition = lcp.substring(argv2.length());
                                     System.out.print(addition);
                                     System.out.flush();
                                     currentLine.append(addition);
-                                    
                                     tabCount = 0;
                                     lastTabPrefix = "";
                                 } else {
-                                    if (input.equals(lastTabPrefix)) {
-                                        tabCount++;
-                                    } else {
-                                        lastTabPrefix = input;
-                                        tabCount = 1;
-                                    }
+                                    if (input.equals(lastTabPrefix)) tabCount++;
+                                    else { lastTabPrefix = input; tabCount = 1; }
 
                                     if (tabCount == 1) {
                                         System.out.print("\u0007");
@@ -276,9 +261,7 @@ public class Main {
                                         System.out.println();
                                         for (int i = 0; i < scriptCandidates.size(); i++) {
                                             System.out.print(scriptCandidates.get(i));
-                                            if (i < scriptCandidates.size() - 1) {
-                                                System.out.print("  ");
-                                            }
+                                            if (i < scriptCandidates.size() - 1) System.out.print("  ");
                                         }
                                         System.out.println();
                                         System.out.print("$ " + input);
@@ -305,14 +288,13 @@ public class Main {
 
                     int lastSpaceIndex = input.lastIndexOf(' ');
                     String rawPrefix = input.substring(lastSpaceIndex + 1);
-
                     String dirPath = ".";
                     String filePrefix = rawPrefix;
 
                     if (rawPrefix.contains("/")) {
                         int lastSlashIndex = rawPrefix.lastIndexOf('/');
-                        dirPath = rawPrefix.substring(0, lastSlashIndex + 1); 
-                        filePrefix = rawPrefix.substring(lastSlashIndex + 1); 
+                        dirPath = rawPrefix.substring(0, lastSlashIndex + 1);
+                        filePrefix = rawPrefix.substring(lastSlashIndex + 1);
                     }
 
                     File searchDir = new File(dirPath);
@@ -321,9 +303,7 @@ public class Main {
 
                     if (files != null) {
                         for (File file : files) {
-                            if (file.getName().startsWith(filePrefix)) {
-                                fileMatches.add(file);
-                            }
+                            if (file.getName().startsWith(filePrefix)) fileMatches.add(file);
                         }
                     }
 
@@ -333,42 +313,29 @@ public class Main {
                         File match = fileMatches.get(0);
                         String matchedName = match.getName();
                         String suffix = match.isDirectory() ? "/" : " ";
-                        
-                        String completePath = (rawPrefix.contains("/")) ? dirPath + matchedName + suffix : matchedName + suffix;
+                        String completePath = rawPrefix.contains("/") ? dirPath + matchedName + suffix : matchedName + suffix;
                         String addition = completePath.substring(rawPrefix.length());
-                        
                         System.out.print(addition);
                         System.out.flush();
                         currentLine.append(addition);
-                        
                         tabCount = 0;
                         lastTabPrefix = "";
-                    } 
-                    else if (fileMatches.size() > 1) {
+                    } else if (fileMatches.size() > 1) {
                         List<String> matchNames = new ArrayList<>();
-                        for (File f : fileMatches) {
-                            matchNames.add(f.getName());
-                        }
-
+                        for (File f : fileMatches) matchNames.add(f.getName());
                         String lcp = findLongestCommonPrefix(matchNames);
 
                         if (lcp.length() > filePrefix.length()) {
-                            String completePath = (rawPrefix.contains("/")) ? dirPath + lcp : lcp;
+                            String completePath = rawPrefix.contains("/") ? dirPath + lcp : lcp;
                             String addition = completePath.substring(rawPrefix.length());
-                            
                             System.out.print(addition);
                             System.out.flush();
                             currentLine.append(addition);
-                            
                             tabCount = 0;
                             lastTabPrefix = "";
                         } else {
-                            if (input.equals(lastTabPrefix)) {
-                                ++tabCount;
-                            } else {
-                                lastTabPrefix = input;
-                                tabCount = 1;
-                            }
+                            if (input.equals(lastTabPrefix)) ++tabCount;
+                            else { lastTabPrefix = input; tabCount = 1; }
 
                             if (tabCount == 1) {
                                 System.out.print("\u0007");
@@ -378,9 +345,7 @@ public class Main {
                                 for (int i = 0; i < fileMatches.size(); i++) {
                                     File m = fileMatches.get(i);
                                     System.out.print(m.getName() + (m.isDirectory() ? "/" : ""));
-                                    if (i < fileMatches.size() - 1) {
-                                        System.out.print("  ");
-                                    }
+                                    if (i < fileMatches.size() - 1) System.out.print("  ");
                                 }
                                 System.out.println();
                                 System.out.print("$ " + input);
@@ -388,8 +353,7 @@ public class Main {
                                 tabCount = 0;
                             }
                         }
-                    } 
-                    else {
+                    } else {
                         System.out.print("\u0007");
                         System.out.flush();
                         tabCount = 0;
@@ -404,27 +368,20 @@ public class Main {
                     continue;
                 }
 
-                if (input.equals(lastTabPrefix)) {
-                    tabCount++;
-                } else {
-                    lastTabPrefix = input;
-                    tabCount = 1;
-                }
+                if (input.equals(lastTabPrefix)) tabCount++;
+                else { lastTabPrefix = input; tabCount = 1; }
 
                 Set<String> candidates = new HashSet<>();
                 candidates.addAll(BUILTINS);
                 String pathEnv = System.getenv("PATH");
                 if (pathEnv != null) {
-                    String[] paths = pathEnv.split(File.pathSeparator);
-                    for (String path : paths) {
+                    for (String path : pathEnv.split(File.pathSeparator)) {
                         File dir = new File(path);
                         if (dir.exists() && dir.isDirectory()) {
                             File[] dirFiles = dir.listFiles();
                             if (dirFiles != null) {
                                 for (File file : dirFiles) {
-                                    if (file.isFile() && file.canExecute()) {
-                                        candidates.add(file.getName());
-                                    }
+                                    if (file.isFile() && file.canExecute()) candidates.add(file.getName());
                                 }
                             }
                         }
@@ -433,11 +390,8 @@ public class Main {
 
                 List<String> matches = new ArrayList<>();
                 for (String candidate : candidates) {
-                    if (candidate.startsWith(input)) {
-                        matches.add(candidate);
-                    }
+                    if (candidate.startsWith(input)) matches.add(candidate);
                 }
-
                 Collections.sort(matches);
 
                 if (matches.size() == 1) {
@@ -448,10 +402,8 @@ public class Main {
                     currentLine.append(addition);
                     tabCount = 0;
                     lastTabPrefix = "";
-                } 
-                else if (matches.size() > 1) {
+                } else if (matches.size() > 1) {
                     String lcp = findLongestCommonPrefix(matches);
-
                     if (lcp.length() > input.length()) {
                         String addition = lcp.substring(input.length());
                         System.out.print(addition);
@@ -467,9 +419,7 @@ public class Main {
                             System.out.println();
                             for (int i = 0; i < matches.size(); i++) {
                                 System.out.print(matches.get(i));
-                                if (i < matches.size() - 1) {
-                                    System.out.print("  ");
-                                }
+                                if (i < matches.size() - 1) System.out.print("  ");
                             }
                             System.out.println();
                             System.out.print("$ " + input);
@@ -477,8 +427,7 @@ public class Main {
                             tabCount = 0;
                         }
                     }
-                } 
-                else {
+                } else {
                     System.out.print("\u0007");
                     System.out.flush();
                     tabCount = 0;
@@ -494,11 +443,8 @@ public class Main {
             if (c == '\n' || c == '\r') {
                 System.out.println();
                 String commandLine = currentLine.toString();
-
                 processCommandLine(commandLine);
-
                 currentLine.setLength(0);
-
                 System.out.print(reapBeforePrompt());
                 System.out.print("$ ");
                 System.out.flush();
@@ -524,91 +470,63 @@ public class Main {
     }
 
     private static void processCommandLine(String input) throws Exception {
-        String[] parts = parseCommand(input);
+        // Check for pipeline
+        List<String> pipeSegments = splitOnPipe(input);
 
-        if (parts.length == 0) {
+        if (pipeSegments.size() > 1) {
+            executePipeline(pipeSegments);
             return;
         }
 
+        // Single command path
+        String[] parts = parseCommand(input);
+        if (parts.length == 0) return;
+
         String stdoutFile = null;
         String stderrFile = null;
-
         boolean stdoutAppend = false;
         boolean stderrAppend = false;
-
         List<String> commandParts = new ArrayList<>();
 
         for (int i = 0; i < parts.length; i++) {
             if (parts[i].equals(">") || parts[i].equals("1>")) {
-                if (i + 1 < parts.length) {
-                    stdoutFile = parts[i + 1];
-                    stdoutAppend = false;
-                }
+                if (i + 1 < parts.length) { stdoutFile = parts[i + 1]; stdoutAppend = false; }
                 i++;
-            }
-
-            else if (parts[i].equals(">>") || parts[i].equals("1>>")) {
-                if (i + 1 < parts.length) {
-                    stdoutFile = parts[i + 1];
-                    stdoutAppend = true;
-                }
+            } else if (parts[i].equals(">>") || parts[i].equals("1>>")) {
+                if (i + 1 < parts.length) { stdoutFile = parts[i + 1]; stdoutAppend = true; }
                 i++;
-            }
-
-            else if (parts[i].equals("2>")) {
-                if (i + 1 < parts.length) {
-                    stderrFile = parts[i + 1];
-                    stderrAppend = false;
-                }
+            } else if (parts[i].equals("2>")) {
+                if (i + 1 < parts.length) { stderrFile = parts[i + 1]; stderrAppend = false; }
                 i++;
-            }
-
-            else if (parts[i].equals("2>>")) {
-                if (i + 1 < parts.length) {
-                    stderrFile = parts[i + 1];
-                    stderrAppend = true;
-                }
+            } else if (parts[i].equals("2>>")) {
+                if (i + 1 < parts.length) { stderrFile = parts[i + 1]; stderrAppend = true; }
                 i++;
-            }
-
-            else {
+            } else {
                 commandParts.add(parts[i]);
             }
         }
 
         parts = commandParts.toArray(new String[0]);
-
-        if (parts.length == 0) {
-            return;
-        }
+        if (parts.length == 0) return;
 
         boolean isBackgroundJob = false;
         if (parts[parts.length - 1].equals("&")) {
             isBackgroundJob = true;
             parts = Arrays.copyOf(parts, parts.length - 1);
         }
-
-        if (parts.length == 0) {
-            return;
-        }
+        if (parts.length == 0) return;
 
         String command = parts[0];
 
         if (command.equals("exit")) {
             configureTerminalMode("icanon echo");
             System.exit(0);
-        }
-
-        else if (command.equals("echo")) {
+        } else if (command.equals("echo")) {
             StringBuilder output = new StringBuilder();
-
             for (int i = 1; i < parts.length; i++) {
-                if (i > 1) {
-                    output.append(" ");
-                }
+                if (i > 1) output.append(" ");
                 output.append(parts[i]);
             }
-
             output.append(System.lineSeparator());
 
             if (stdoutFile != null) {
@@ -618,16 +536,10 @@ public class Main {
             } else {
                 System.out.print(output);
             }
+            if (stderrFile != null) new FileWriter(stderrFile, stderrAppend).close();
 
-            if (stderrFile != null) {
-                new FileWriter(stderrFile, stderrAppend).close();
-            }
-        }
-
-        else if (command.equals("type")) {
-            if (parts.length < 2) {
-                return;
-            }
+        } else if (command.equals("type")) {
+            if (parts.length < 2) return;
             String target = parts[1];
             StringBuilder output = new StringBuilder();
 
@@ -637,7 +549,6 @@ public class Main {
                 String pathEnv = System.getenv("PATH");
                 String[] paths = pathEnv != null ? pathEnv.split(File.pathSeparator) : new String[0];
                 boolean pathFound = false;
-
                 for (String path : paths) {
                     File file = new File(path, target);
                     if (file.exists() && file.canExecute()) {
@@ -646,10 +557,7 @@ public class Main {
                         break;
                     }
                 }
-
-                if (!pathFound) {
-                    output.append(target).append(": not found").append(System.lineSeparator());
-                }
+                if (!pathFound) output.append(target).append(": not found").append(System.lineSeparator());
             }
 
             if (stdoutFile != null) {
@@ -659,15 +567,11 @@ public class Main {
             } else {
                 System.out.print(output);
             }
+            if (stderrFile != null) new FileWriter(stderrFile, stderrAppend).close();
 
-            if (stderrFile != null) {
-                new FileWriter(stderrFile, stderrAppend).close();
-            }
-        }
-
-        else if (command.equals("complete")) {
+        } else if (command.equals("complete")) {
             StringBuilder output = new StringBuilder();
-            
+
             if (parts.length >= 3 && parts[1].equals("-p")) {
                 String targetCommand = parts[2];
                 if (registeredCompletions.containsKey(targetCommand)) {
@@ -676,15 +580,10 @@ public class Main {
                 } else {
                     output.append("complete: ").append(targetCommand).append(": no completion specification").append(System.lineSeparator());
                 }
-            } 
-            else if (parts.length >= 4 && parts[1].equals("-C")) {
-                String scriptPath = parts[2];
-                String targetCommand = parts[3];
-                registeredCompletions.put(targetCommand, scriptPath);
-            }
-            else if (parts.length >= 3 && parts[1].equals("-r")) {
-                String targetCommand = parts[2];
-                registeredCompletions.remove(targetCommand);
+            } else if (parts.length >= 4 && parts[1].equals("-C")) {
+                registeredCompletions.put(parts[3], parts[2]);
+            } else if (parts.length >= 3 && parts[1].equals("-r")) {
+                registeredCompletions.remove(parts[2]);
             }
 
             if (stdoutFile != null) {
@@ -694,13 +593,9 @@ public class Main {
             } else {
                 System.out.print(output);
             }
+            if (stderrFile != null) new FileWriter(stderrFile, stderrAppend).close();
 
-            if (stderrFile != null) {
-                new FileWriter(stderrFile, stderrAppend).close();
-            }
-        }
-
-        else if (command.equals("jobs")) {
+        } else if (command.equals("jobs")) {
             updateJobStatuses();
             StringBuilder output = new StringBuilder();
             int totalJobs = backgroundJobs.size();
@@ -708,14 +603,10 @@ public class Main {
             for (int i = 0; i < totalJobs; i++) {
                 Job job = backgroundJobs.get(i);
                 char marker = ' ';
-                if (i == totalJobs - 1) {
-                    marker = '+';
-                } else if (i == totalJobs - 2) {
-                    marker = '-';
-                }
+                if (i == totalJobs - 1) marker = '+';
+                else if (i == totalJobs - 2) marker = '-';
                 output.append(String.format("[%d]%c  %-24s%s%n", job.id, marker, job.status, job.command));
             }
-
             backgroundJobs.removeIf(job -> job.status.equals("Done"));
 
             if (stdoutFile != null) {
@@ -725,42 +616,31 @@ public class Main {
             } else {
                 System.out.print(output);
             }
+            if (stderrFile != null) new FileWriter(stderrFile, stderrAppend).close();
 
-            if (stderrFile != null) {
-                new FileWriter(stderrFile, stderrAppend).close();
-            }
-        }
-
-        else {
+        } else {
             String pathEnv = System.getenv("PATH");
             String[] paths = pathEnv != null ? pathEnv.split(File.pathSeparator) : new String[0];
-
             boolean found = false;
 
             for (String path : paths) {
                 File file = new File(path, command);
-
                 if (file.exists() && file.canExecute()) {
                     ProcessBuilder pb = new ProcessBuilder(Arrays.asList(parts));
-                    
                     pb.redirectInput(ProcessBuilder.Redirect.INHERIT);
 
                     if (stdoutFile != null) {
-                        if (stdoutAppend) {
-                            pb.redirectOutput(ProcessBuilder.Redirect.appendTo(new File(stdoutFile)));
-                        } else {
-                            pb.redirectOutput(new File(stdoutFile));
-                        }
+                        pb.redirectOutput(stdoutAppend
+                            ? ProcessBuilder.Redirect.appendTo(new File(stdoutFile))
+                            : ProcessBuilder.Redirect.to(new File(stdoutFile)));
                     } else {
                         pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
                     }
 
                     if (stderrFile != null) {
-                        if (stderrAppend) {
-                            pb.redirectError(ProcessBuilder.Redirect.appendTo(new File(stderrFile)));
-                        } else {
-                            pb.redirectError(new File(stderrFile));
-                        }
+                        pb.redirectError(stderrAppend
+                            ? ProcessBuilder.Redirect.appendTo(new File(stderrFile))
+                            : ProcessBuilder.Redirect.to(new File(stderrFile)));
                     } else {
                         pb.redirectError(ProcessBuilder.Redirect.INHERIT);
                     }
@@ -768,21 +648,19 @@ public class Main {
                     Process process = pb.start();
 
                     if (isBackgroundJob) {
-                        // Reap done jobs first so the table is clean before computing next ID
                         backgroundJobs.removeIf(job -> job.status.equals("Done"));
                         updateJobStatuses();
                         backgroundJobs.removeIf(job -> job.status.equals("Done"));
 
                         int newJobId = getNextJobId();
                         System.out.println("[" + newJobId + "] " + process.pid());
-                        
+
                         StringBuilder fullCmd = new StringBuilder();
                         for (int i = 0; i < parts.length; i++) {
                             if (i > 0) fullCmd.append(" ");
                             fullCmd.append(parts[i]);
                         }
                         fullCmd.append(" &");
-
                         backgroundJobs.add(new Job(newJobId, process.pid(), fullCmd.toString(), "Running", process));
                     } else {
                         process.waitFor();
@@ -795,7 +673,6 @@ public class Main {
 
             if (!found) {
                 String errorMessage = command + ": command not found";
-
                 if (stderrFile != null) {
                     try (FileWriter writer = new FileWriter(stderrFile, stderrAppend)) {
                         writer.write(errorMessage + System.lineSeparator());
@@ -805,6 +682,94 @@ public class Main {
                 }
             }
         }
+    }
+
+    // Execute a pipeline of two or more external commands
+    private static void executePipeline(List<String> segments) throws Exception {
+        int n = segments.size();
+        List<Process> processes = new ArrayList<>();
+
+        Process prevProcess = null;
+
+        for (int i = 0; i < n; i++) {
+            String[] parts = parseCommand(segments.get(i));
+            if (parts.length == 0) continue;
+
+            String command = parts[0];
+            String execPath = resolveCommand(command);
+            if (execPath == null) {
+                System.out.println(command + ": command not found");
+                return;
+            }
+
+            ProcessBuilder pb = new ProcessBuilder(Arrays.asList(parts));
+            pb.redirectError(ProcessBuilder.Redirect.INHERIT);
+
+            // First command: read from terminal
+            if (i == 0) {
+                pb.redirectInput(ProcessBuilder.Redirect.INHERIT);
+            } else {
+                // Pipe stdin from previous process's stdout
+                pb.redirectInput(prevProcess.inputReader().equals(null)
+                    ? ProcessBuilder.Redirect.INHERIT
+                    : ProcessBuilder.Redirect.PIPE);
+            }
+
+            // Last command: write to terminal
+            if (i == n - 1) {
+                pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+            }
+
+            Process process;
+
+            if (i == 0) {
+                // Start first process normally
+                pb.redirectInput(ProcessBuilder.Redirect.INHERIT);
+                process = pb.start();
+            } else {
+                // Connect stdout of previous to stdin of this process
+                pb.redirectInput(ProcessBuilder.Redirect.PIPE);
+                process = pb.start();
+
+                // Pipe data from prevProcess stdout -> this process stdin in a thread
+                final Process src = prevProcess;
+                final Process dst = process;
+                Thread piper = new Thread(() -> {
+                    try (InputStream from = src.getInputStream();
+                         var to = dst.getOutputStream()) {
+                        byte[] buf = new byte[4096];
+                        int read;
+                        while ((read = from.read(buf)) != -1) {
+                            to.write(buf, 0, read);
+                            to.flush();
+                        }
+                    } catch (IOException e) {
+                        // pipe closed normally
+                    }
+                });
+                piper.setDaemon(true);
+                piper.start();
+            }
+
+            processes.add(process);
+            prevProcess = process;
+        }
+
+        // Wait for all processes to finish
+        for (Process p : processes) {
+            p.waitFor();
+        }
+    }
+
+    // Resolve a command name to its full path via PATH
+    private static String resolveCommand(String command) {
+        String pathEnv = System.getenv("PATH");
+        if (pathEnv == null) return null;
+        for (String path : pathEnv.split(File.pathSeparator)) {
+            File file = new File(path, command);
+            if (file.exists() && file.canExecute()) return file.getAbsolutePath();
+        }
+        return null;
     }
 
     private static void configureTerminalMode(String args) {
