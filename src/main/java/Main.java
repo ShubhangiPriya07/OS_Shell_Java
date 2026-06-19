@@ -15,7 +15,6 @@ public class Main {
         boolean inSingleQuotes = false;
         boolean inDoubleQuotes = false;
 
-        // FIXED: Changed input.length to input.length()
         for (int i = 0; i < input.length(); i++) {
             char c = input.charAt(i);
 
@@ -200,6 +199,57 @@ public class Main {
 
                         if (stderrFile != null) {
                             new FileWriter(stderrFile, stderrAppend).close();
+                        }
+                    }
+
+                    // --- ADDED: 'type' Builtin Command Handling ---
+                    else if (command.equals("type")) {
+                        if (parts.length > 1) {
+                            String target = parts[1];
+                            if (target.equals("echo") || target.equals("exit") || target.equals("type")) {
+                                String msg = target + " is a shell builtin\r\n";
+                                if (stdoutFile != null) {
+                                    try (FileWriter writer = new FileWriter(stdoutFile, stdoutAppend)) {
+                                        writer.write(target + " is a shell builtin\n");
+                                    }
+                                } else {
+                                    System.out.print(msg);
+                                    System.out.flush();
+                                }
+                            } else {
+                                String pathEnv = System.getenv("PATH");
+                                String[] paths = pathEnv.split(File.pathSeparator);
+                                boolean pathFound = false;
+
+                                for (String path : paths) {
+                                    File file = new File(path, target);
+                                    if (file.exists() && file.canExecute()) {
+                                        String msg = target + " is " + file.getAbsolutePath() + "\r\n";
+                                        if (stdoutFile != null) {
+                                            try (FileWriter writer = new FileWriter(stdoutFile, stdoutAppend)) {
+                                                writer.write(target + " is " + file.getAbsolutePath() + "\n");
+                                            }
+                                        } else {
+                                            System.out.print(msg);
+                                            System.out.flush();
+                                        }
+                                        pathFound = true;
+                                        break;
+                                    }
+                                }
+
+                                if (!pathFound) {
+                                    String errMsg = target + ": not found\r\n";
+                                    if (stderrFile != null) {
+                                        try (FileWriter writer = new FileWriter(stderrFile, stderrAppend)) {
+                                            writer.write(target + ": not found\n");
+                                        }
+                                    } else {
+                                        System.out.print(errMsg);
+                                        System.out.flush();
+                                    }
+                                }
+                            }
                         }
                     }
 
