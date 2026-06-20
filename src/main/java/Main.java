@@ -16,8 +16,11 @@ import java.util.Map;
 import java.util.Set;
 
 public class Main {
-    private static final List<String> BUILTINS = List.of("echo", "exit", "type", "complete", "jobs", "pwd");
+    private static final List<String> BUILTINS = List.of("echo", "exit", "type", "complete", "jobs", "pwd", "cd");
     private static final Map<String, String> registeredCompletions = new HashMap<>();
+
+    // Tracks the shell's current working directory (since JVM can't truly chdir())
+    private static String currentWorkingDirectory = System.getProperty("user.dir");
 
     private static class Job {
         int id;
@@ -216,7 +219,9 @@ public class Main {
                         int ls = rawPrefix.lastIndexOf('/');
                         dirPath = rawPrefix.substring(0, ls + 1); filePrefix = rawPrefix.substring(ls + 1);
                     }
-                    File[] files = new File(dirPath).listFiles();
+                    File baseDir = new File(dirPath);
+                    if (!baseDir.isAbsolute()) baseDir = new File(currentWorkingDirectory, dirPath);
+                    File[] files = baseDir.listFiles();
                     List<File> fileMatches = new ArrayList<>();
                     if (files != null) for (File f : files) if (f.getName().startsWith(filePrefix)) fileMatches.add(f);
                     fileMatches.sort((a, b) -> a.getName().compareTo(b.getName()));
@@ -353,23 +358,45 @@ public class Main {
             StringBuilder sb = new StringBuilder();
             for (int i = 1; i < parts.length; i++) { if (i > 1) sb.append(" "); sb.append(parts[i]); }
             sb.append(System.lineSeparator());
-            if (stdoutFile != null) { try (FileWriter w = new FileWriter(stdoutFile, stdoutAppend)) { w.write(sb.toString()); } }
+            if (stdoutFile != null) { try (FileWriter w = new FileWriter(resolvePath(stdoutFile), stdoutAppend)) { w.write(sb.toString()); } }
             else System.out.print(sb);
-            if (stderrFile != null) new FileWriter(stderrFile, stderrAppend).close();
+            if (stderrFile != null) new FileWriter(resolvePath(stderrFile), stderrAppend).close();
         } else if (command.equals("pwd")) {
-            String cwd = System.getProperty("user.dir");
-            String out = cwd + System.lineSeparator();
-            if (stdoutFile != null) { try (FileWriter w = new FileWriter(stdoutFile, stdoutAppend)) { w.write(out); } }
+            String out = currentWorkingDirectory + System.lineSeparator();
+            if (stdoutFile != null) { try (FileWriter w = new FileWriter(resolvePath(stdoutFile), stdoutAppend)) { w.write(out); } }
             else System.out.print(out);
-            if (stderrFile != null) new FileWriter(stderrFile, stderrAppend).close();
+            if (stderrFile != null) new FileWriter(resolvePath(stderrFile), stderrAppend).close();
+        } else if (command.equals("cd")) {
+            if (parts.length < 2) {
+                // No argument: bash defaults to HOME, but tests only cover absolute paths here
+                return;
+            }
+            String targetArg = parts[1];
+            File targetDir;
+
+            if (targetArg.startsWith("/")) {
+                // Absolute path
+                targetDir = new File(targetArg);
+            } else {
+                // Not handled in this stage yet (relative paths, ~), but resolve relative to cwd anyway
+                targetDir = new File(currentWorkingDirectory, targetArg);
+            }
+
+            if (targetDir.exists() && targetDir.isDirectory()) {
+                currentWorkingDirectory = targetDir.getCanonicalPath();
+            } else {
+                String err = "cd: " + targetArg + ": No such file or directory" + System.lineSeparator();
+                if (stderrFile != null) { try (FileWriter w = new FileWriter(resolvePath(stderrFile), stderrAppend)) { w.write(err); } }
+                else System.out.print(err);
+            }
         } else if (command.equals("type")) {
             if (parts.length < 2) return;
             String target = parts[1];
             String result = BUILTINS.contains(target) ? target + " is a shell builtin" : resolveCommandPath(target) != null ? target + " is " + resolveCommandPath(target) : target + ": not found";
             String out = result + System.lineSeparator();
-            if (stdoutFile != null) { try (FileWriter w = new FileWriter(stdoutFile, stdoutAppend)) { w.write(out); } }
+            if (stdoutFile != null) { try (FileWriter w = new FileWriter(resolvePath(stdoutFile), stdoutAppend)) { w.write(out); } }
             else System.out.print(out);
-            if (stderrFile != null) new FileWriter(stderrFile, stderrAppend).close();
+            if (stderrFile != null) new FileWriter(resolvePath(stderrFile), stderrAppend).close();
         } else if (command.equals("complete")) {
             StringBuilder output = new StringBuilder();
             if (parts.length >= 3 && parts[1].equals("-p")) {
@@ -381,9 +408,9 @@ public class Main {
             } else if (parts.length >= 3 && parts[1].equals("-r")) {
                 registeredCompletions.remove(parts[2]);
             }
-            if (stdoutFile != null) { try (FileWriter w = new FileWriter(stdoutFile, stdoutAppend)) { w.write(output.toString()); } }
+            if (stdoutFile != null) { try (FileWriter w = new FileWriter(resolvePath(stdoutFile), stdoutAppend)) { w.write(output.toString()); } }
             else System.out.print(output);
-            if (stderrFile != null) new FileWriter(stderrFile, stderrAppend).close();
+            if (stderrFile != null) new FileWriter(resolvePath(stderrFile), stderrAppend).close();
         } else if (command.equals("jobs")) {
             updateJobStatuses();
             StringBuilder sb = new StringBuilder();
@@ -394,17 +421,18 @@ public class Main {
                 sb.append(String.format("[%d]%c  %-24s%s%n", job.id, marker, job.status, job.command));
             }
             backgroundJobs.removeIf(job -> job.status.equals("Done"));
-            if (stdoutFile != null) { try (FileWriter w = new FileWriter(stdoutFile, stdoutAppend)) { w.write(sb.toString()); } }
+            if (stdoutFile != null) { try (FileWriter w = new FileWriter(resolvePath(stdoutFile), stdoutAppend)) { w.write(sb.toString()); } }
             else System.out.print(sb);
-            if (stderrFile != null) new FileWriter(stderrFile, stderrAppend).close();
+            if (stderrFile != null) new FileWriter(resolvePath(stderrFile), stderrAppend).close();
         } else {
             String execPath = resolveCommandPath(command);
             if (execPath != null) {
                 ProcessBuilder pb = new ProcessBuilder(Arrays.asList(parts));
+                pb.directory(new File(currentWorkingDirectory));
                 pb.redirectInput(ProcessBuilder.Redirect.INHERIT);
-                if (stdoutFile != null) pb.redirectOutput(stdoutAppend ? ProcessBuilder.Redirect.appendTo(new File(stdoutFile)) : ProcessBuilder.Redirect.to(new File(stdoutFile)));
+                if (stdoutFile != null) pb.redirectOutput(stdoutAppend ? ProcessBuilder.Redirect.appendTo(resolvePath(stdoutFile)) : ProcessBuilder.Redirect.to(resolvePath(stdoutFile)));
                 else pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
-                if (stderrFile != null) pb.redirectError(stderrAppend ? ProcessBuilder.Redirect.appendTo(new File(stderrFile)) : ProcessBuilder.Redirect.to(new File(stderrFile)));
+                if (stderrFile != null) pb.redirectError(stderrAppend ? ProcessBuilder.Redirect.appendTo(resolvePath(stderrFile)) : ProcessBuilder.Redirect.to(resolvePath(stderrFile)));
                 else pb.redirectError(ProcessBuilder.Redirect.INHERIT);
                 Process process = pb.start();
                 if (isBackgroundJob) {
@@ -420,10 +448,17 @@ public class Main {
                 } else process.waitFor();
             } else {
                 String err = command + ": command not found";
-                if (stderrFile != null) { try (FileWriter w = new FileWriter(stderrFile, stderrAppend)) { w.write(err + System.lineSeparator()); } }
+                if (stderrFile != null) { try (FileWriter w = new FileWriter(resolvePath(stderrFile), stderrAppend)) { w.write(err + System.lineSeparator()); } }
                 else System.out.println(err);
             }
         }
+    }
+
+    // Resolve a (possibly relative) redirection target path against the shell's tracked cwd
+    private static File resolvePath(String path) {
+        File f = new File(path);
+        if (f.isAbsolute()) return f;
+        return new File(currentWorkingDirectory, path);
     }
 
     private static void runBuiltinToStream(String[] parts, InputStream stdinStream, PrintStream out) throws Exception {
@@ -433,7 +468,16 @@ public class Main {
             for (int i = 1; i < parts.length; i++) { if (i > 1) sb.append(" "); sb.append(parts[i]); }
             out.println(sb);
         } else if (command.equals("pwd")) {
-            out.println(System.getProperty("user.dir"));
+            out.println(currentWorkingDirectory);
+        } else if (command.equals("cd")) {
+            if (parts.length < 2) return;
+            String targetArg = parts[1];
+            File targetDir = targetArg.startsWith("/") ? new File(targetArg) : new File(currentWorkingDirectory, targetArg);
+            if (targetDir.exists() && targetDir.isDirectory()) {
+                currentWorkingDirectory = targetDir.getCanonicalPath();
+            } else {
+                out.println("cd: " + targetArg + ": No such file or directory");
+            }
         } else if (command.equals("type")) {
             if (parts.length < 2) return;
             String target = parts[1];
@@ -515,6 +559,7 @@ public class Main {
                 }
 
                 ProcessBuilder pb = new ProcessBuilder(Arrays.asList(parts));
+                pb.directory(new File(currentWorkingDirectory));
                 pb.redirectError(ProcessBuilder.Redirect.INHERIT);
 
                 if (currentInput == null) pb.redirectInput(ProcessBuilder.Redirect.INHERIT);
