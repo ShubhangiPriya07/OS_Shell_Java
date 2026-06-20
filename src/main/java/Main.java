@@ -19,7 +19,6 @@ public class Main {
     private static final List<String> BUILTINS = List.of("echo", "exit", "type", "complete", "jobs", "pwd", "cd");
     private static final Map<String, String> registeredCompletions = new HashMap<>();
 
-    // Tracks the shell's current working directory (since JVM can't truly chdir())
     private static String currentWorkingDirectory = System.getProperty("user.dir");
 
     private static class Job {
@@ -321,6 +320,22 @@ public class Main {
         }
     }
 
+    // Resolve "~" or "~/rest/of/path" to an absolute path using HOME.
+    // Returns the original argument unchanged if it doesn't start with "~".
+    private static String expandTilde(String arg) {
+        if (arg.equals("~")) {
+            String home = System.getenv("HOME");
+            return home != null ? home : arg;
+        }
+        if (arg.startsWith("~/")) {
+            String home = System.getenv("HOME");
+            if (home != null) {
+                return home + arg.substring(1); // keep the leading "/" from "~/..."
+            }
+        }
+        return arg;
+    }
+
     private static void processCommandLine(String input) throws Exception {
         List<String> pipeSegments = splitOnPipe(input);
         if (pipeSegments.size() > 1) { executePipeline(pipeSegments); return; }
@@ -368,24 +383,24 @@ public class Main {
             if (stderrFile != null) new FileWriter(resolvePath(stderrFile), stderrAppend).close();
         } else if (command.equals("cd")) {
             if (parts.length < 2) {
-                // No argument: bash defaults to HOME, but tests only cover absolute paths here
+                // bash default: cd with no args goes to HOME
+                String home = System.getenv("HOME");
+                if (home != null) {
+                    File homeDir = new File(home);
+                    if (homeDir.exists() && homeDir.isDirectory()) {
+                        currentWorkingDirectory = homeDir.getCanonicalPath();
+                    }
+                }
                 return;
             }
-            String targetArg = parts[1];
-            File targetDir;
-
-            if (targetArg.startsWith("/")) {
-                // Absolute path
-                targetDir = new File(targetArg);
-            } else {
-                // Not handled in this stage yet (relative paths, ~), but resolve relative to cwd anyway
-                targetDir = new File(currentWorkingDirectory, targetArg);
-            }
+            String rawArg = parts[1];
+            String targetArg = expandTilde(rawArg);
+            File targetDir = targetArg.startsWith("/") ? new File(targetArg) : new File(currentWorkingDirectory, targetArg);
 
             if (targetDir.exists() && targetDir.isDirectory()) {
                 currentWorkingDirectory = targetDir.getCanonicalPath();
             } else {
-                String err = "cd: " + targetArg + ": No such file or directory" + System.lineSeparator();
+                String err = "cd: " + rawArg + ": No such file or directory" + System.lineSeparator();
                 if (stderrFile != null) { try (FileWriter w = new FileWriter(resolvePath(stderrFile), stderrAppend)) { w.write(err); } }
                 else System.out.print(err);
             }
@@ -454,7 +469,6 @@ public class Main {
         }
     }
 
-    // Resolve a (possibly relative) redirection target path against the shell's tracked cwd
     private static File resolvePath(String path) {
         File f = new File(path);
         if (f.isAbsolute()) return f;
@@ -470,13 +484,23 @@ public class Main {
         } else if (command.equals("pwd")) {
             out.println(currentWorkingDirectory);
         } else if (command.equals("cd")) {
-            if (parts.length < 2) return;
-            String targetArg = parts[1];
+            if (parts.length < 2) {
+                String home = System.getenv("HOME");
+                if (home != null) {
+                    File homeDir = new File(home);
+                    if (homeDir.exists() && homeDir.isDirectory()) {
+                        currentWorkingDirectory = homeDir.getCanonicalPath();
+                    }
+                }
+                return;
+            }
+            String rawArg = parts[1];
+            String targetArg = expandTilde(rawArg);
             File targetDir = targetArg.startsWith("/") ? new File(targetArg) : new File(currentWorkingDirectory, targetArg);
             if (targetDir.exists() && targetDir.isDirectory()) {
                 currentWorkingDirectory = targetDir.getCanonicalPath();
             } else {
-                out.println("cd: " + targetArg + ": No such file or directory");
+                out.println("cd: " + rawArg + ": No such file or directory");
             }
         } else if (command.equals("type")) {
             if (parts.length < 2) return;
